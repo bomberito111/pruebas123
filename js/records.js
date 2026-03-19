@@ -89,6 +89,17 @@
     var container = document.getElementById('db-lv1-list');
     if (!container) return;
 
+    // ── FORCE container display (bypass any CSS/cache issues) ──
+    container.style.display       = 'block';
+    container.style.flexDirection = '';
+    container.style.gap           = '';
+    container.style.alignContent  = '';
+    container.style.overflowY     = 'auto';
+    container.style.overflowX     = 'hidden';
+    container.style.padding       = '12px 14px 90px';
+    container.style.minHeight     = '0';
+    container.style.flex          = '1';
+
     var searchEl = document.getElementById('lv1-search');
     var query = searchEl ? searchEl.value.trim().toLowerCase() : '';
 
@@ -132,12 +143,28 @@
     }
 
     if (clients.length === 0) {
-      container.innerHTML = '<div class="db-empty">🌱 Sin clientes registrados.</div>';
+      container.innerHTML = '<div style="text-align:center;padding:40px 20px;color:#9ca3af;font-size:14px;">🌱 Sin clientes registrados aún.</div>';
       return;
     }
 
-    // Sort by name
-    clients.sort(function (a, b) { return a.name.localeCompare(b.name); });
+    // Sort by worst risk then name
+    var RORD = { extremo: 0, alto: 1, moderado: 2, bajo: 3 };
+    clients.sort(function (a, b) {
+      var ra = worstRisk(Object.values(a.trees).map(function(evs) {
+        evs.sort(function(x,y){return(y.ev.timestamp||0)-(x.ev.timestamp||0);});
+        return getEffRisk(evs[0].ev);
+      }));
+      var rb = worstRisk(Object.values(b.trees).map(function(evs) {
+        evs.sort(function(x,y){return(y.ev.timestamp||0)-(x.ev.timestamp||0);});
+        return getEffRisk(evs[0].ev);
+      }));
+      var d = (RORD[ra]||3) - (RORD[rb]||3);
+      return d !== 0 ? d : a.name.localeCompare(b.name);
+    });
+
+    // ── Inline style constants (immune to any CSS) ──
+    var CARD = 'display:block;width:100%;box-sizing:border-box;background:#ffffff;border:1.5px solid #e5e7eb;border-radius:16px;box-shadow:0 2px 10px rgba(0,0,0,.07);margin-bottom:14px;overflow:visible;cursor:pointer;-webkit-tap-highlight-color:transparent;';
+    var RBAR_COLORS = { bajo: '#22c55e', moderado: '#f59e0b', alto: '#f97316', extremo: '#b91c1c' };
 
     var html = '';
     clients.forEach(function (c) {
@@ -147,8 +174,9 @@
 
       // Latest eval per tree
       var latestEvals = treeIds.map(function (tid) {
-        var evs = c.trees[tid];
-        evs.sort(function (a, b) { return (b.ev.timestamp || 0) - (a.ev.timestamp || 0); });
+        var evs = c.trees[tid].slice().sort(function (a, b) {
+          return (b.ev.timestamp || 0) - (a.ev.timestamp || 0);
+        });
         return evs[0];
       });
 
@@ -163,71 +191,86 @@
 
       var worst = worstRisk(riskLevels);
       var extremoCount = riskCounts.extremo || 0;
+      var altoCount    = riskCounts.alto || 0;
+      var wColor = getRiskColor(worst);
 
       // Last eval date
       var lastTs = 0;
       c.evals.forEach(function (item) {
-        if ((item.ev.timestamp || 0) > lastTs) lastTs = item.ev.timestamp;
+        var t = item.ev.timestamp || item.ev.ts || 0;
+        if (t > lastTs) lastTs = t;
       });
 
-      var encodedName = encodeURIComponent(c.name);
+      var enc = encodeURIComponent(c.name);
       var letter = c.name.charAt(0).toUpperCase();
 
-      // Risk bar proportions
+      // ── Risk bar ──
       var barTotal = totalTrees || 1;
       var barHtml = '';
-      ['bajo', 'moderado', 'alto', 'extremo'].forEach(function (r) {
-        var pct = ((riskCounts[r] || 0) / barTotal * 100).toFixed(1);
+      ['bajo','moderado','alto','extremo'].forEach(function (r) {
         if (riskCounts[r] > 0) {
-          barHtml += '<div class="crb-' + r + '" style="flex:' + riskCounts[r] + '"></div>';
+          barHtml += '<div style="flex:' + riskCounts[r] + ';background:' + RBAR_COLORS[r] + ';height:100%;"></div>';
         }
       });
 
-      var wColor = getRiskColor(worst);
-      html += '<div class="client-card" onclick="dbOpenClient(\'' + encodedName + '\')" style="margin-bottom:10px;">';
+      // ── Card HTML (100% inline styles) ──
+      html += '<div onclick="dbOpenClient(\'' + enc + '\')" style="' + CARD + '">';
 
-      // ── Top: avatar + name + risk badge ──
-      html += '<div class="cc-head">';
-      html += '<div class="cc-avatar">' + letter + '</div>';
-      html += '<div class="cc-info">';
-      html += '<span class="cc-name">' + c.name + '</span>';
-      html += '<div class="cc-meta">';
-      html += '<span style="font-size:10px;">📅 ' + fmtDate(lastTs) + '</span>';
-      html += '<span style="background:' + wColor + ';color:#fff;padding:2px 9px;border-radius:20px;font-size:9px;font-weight:800;text-transform:uppercase;">' + getRiskLabel(worst) + '</span>';
+      // Top row: avatar + info + chevron
+      html += '<div style="display:flex;align-items:center;gap:12px;padding:14px 14px 12px;">';
+      html += '<div style="width:46px;height:46px;border-radius:12px;background:linear-gradient(135deg,#0a2410 0%,#166534 100%);font-size:20px;font-weight:900;color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:Georgia,serif;">' + letter + '</div>';
+      html += '<div style="flex:1;min-width:0;">';
+      html += '<div style="font-family:Georgia,serif;font-size:16px;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;">' + c.name + '</div>';
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap;">';
+      html += '<span style="font-size:11px;color:#6b7280;">📅 ' + fmtDate(lastTs) + '</span>';
+      html += '<span style="background:' + wColor + ';color:#fff;padding:2px 10px;border-radius:20px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;">' + getRiskLabel(worst) + '</span>';
       html += '</div></div>';
-      html += '<span style="font-size:18px;color:#ccc;flex-shrink:0;">›</span>';
+      html += '<div style="font-size:22px;color:#d1d5db;flex-shrink:0;line-height:1;">›</div>';
       html += '</div>';
 
-      // ── Colored risk distribution bar ──
-      if (barHtml) html += '<div class="cc-risk-bar">' + barHtml + '</div>';
-
-      // ── Stats row ──
-      html += '<div class="cc-stats">';
-      html += '<div class="cc-stat"><span class="cc-stat-val">' + totalTrees + '</span><span class="cc-stat-lbl">Árboles</span></div>';
-      html += '<div class="cc-stat"><span class="cc-stat-val">' + totalEvals + '</span><span class="cc-stat-lbl">Evaluaciones</span></div>';
-      html += '<div class="cc-stat' + (extremoCount > 0 ? ' extremo' : '') + '"><span class="cc-stat-val">' + (extremoCount || '—') + '</span><span class="cc-stat-lbl">Extremo</span></div>';
-      html += '</div>';
-
-      // ── Risk pills (only if more than one risk level) ──
-      var riskPillHtml = '';
-      ['extremo','alto','moderado','bajo'].forEach(function (r) {
-        if (riskCounts[r] > 0) {
-          riskPillHtml += '<span style="background:' + getRiskColor(r) + '18;color:' + getRiskColor(r) + ';border:1px solid ' + getRiskColor(r) + '44;border-radius:20px;padding:2px 9px;font-size:10px;font-weight:800;">' + riskCounts[r] + ' ' + getRiskLabel(r) + '</span>';
-        }
-      });
-      if (riskPillHtml) {
-        html += '<div style="padding:8px 14px;display:flex;gap:6px;flex-wrap:wrap;">' + riskPillHtml + '</div>';
+      // Risk distribution bar
+      if (barHtml) {
+        html += '<div style="height:5px;display:flex;width:100%;overflow:hidden;">' + barHtml + '</div>';
       }
 
-      // ── Actions: 2×2 grid ──
-      html += '<div class="client-actions">';
-      html += '<button class="ca-btn" onclick="event.stopPropagation();dbOpenClient(\'' + encodedName + '\')">🌳 Ver árboles</button>';
-      html += '<button class="ca-btn" onclick="event.stopPropagation();openDocsModal(\'' + encodedName + '\')">📁 Archivos</button>';
-      html += '<button class="ca-btn" style="color:#1d4ed8;" onclick="event.stopPropagation();dbExportClientPDF(\'' + encodedName + '\')">📄 Exportar PDF</button>';
-      html += '<button class="ca-btn" style="color:#b91c1c;" onclick="event.stopPropagation();if(confirm(\'¿Eliminar cliente ' + c.name.replace(/'/g,"\\'") + '?\'))deleteClientFromRecords(\'' + encodedName + '\')">🗑 Eliminar</button>';
+      // Stats row (3 columns)
+      html += '<div style="display:flex;border-top:1px solid #f3f4f6;border-bottom:1px solid #f3f4f6;">';
+      html += '<div style="flex:1;padding:10px 6px;text-align:center;border-right:1px solid #f3f4f6;">';
+      html +=   '<div style="font-family:\'IBM Plex Mono\',monospace;font-size:20px;font-weight:800;color:#111827;line-height:1;">' + totalTrees + '</div>';
+      html +=   '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#9ca3af;margin-top:2px;">Árboles</div>';
+      html += '</div>';
+      html += '<div style="flex:1;padding:10px 6px;text-align:center;border-right:1px solid #f3f4f6;">';
+      html +=   '<div style="font-family:\'IBM Plex Mono\',monospace;font-size:20px;font-weight:800;color:#111827;line-height:1;">' + totalEvals + '</div>';
+      html +=   '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#9ca3af;margin-top:2px;">Evaluaciones</div>';
+      html += '</div>';
+      html += '<div style="flex:1;padding:10px 6px;text-align:center;">';
+      html +=   '<div style="font-family:\'IBM Plex Mono\',monospace;font-size:20px;font-weight:800;color:' + (extremoCount > 0 ? '#b91c1c' : altoCount > 0 ? '#ea580c' : '#9ca3af') + ';line-height:1;">' + (extremoCount || altoCount || '—') + '</div>';
+      html +=   '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#9ca3af;margin-top:2px;">' + (extremoCount > 0 ? 'Extremo' : altoCount > 0 ? 'Alto' : 'Riesgo') + '</div>';
+      html += '</div>';
       html += '</div>';
 
-      html += '</div>'; // client-card
+      // Risk pills (if varied)
+      var pillHtml = '';
+      ['extremo','alto','moderado','bajo'].forEach(function (r) {
+        if (riskCounts[r] > 0) {
+          var rc = getRiskColor(r);
+          pillHtml += '<span style="background:' + rc + '18;color:' + rc + ';border:1px solid ' + rc + '55;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;">' + riskCounts[r] + ' ' + getRiskLabel(r) + '</span>';
+        }
+      });
+      if (pillHtml) {
+        html += '<div style="padding:8px 14px;display:flex;gap:6px;flex-wrap:wrap;">' + pillHtml + '</div>';
+      }
+
+      // Action buttons (2×2 grid)
+      var btnBase = 'display:flex;align-items:center;justify-content:center;gap:5px;padding:12px 8px;background:#fff;border:none;border-top:1px solid #f3f4f6;font-size:12px;font-weight:700;color:#374151;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif;white-space:nowrap;width:100%;box-sizing:border-box;';
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr;border-top:1px solid #f3f4f6;">';
+      html += '<button onclick="event.stopPropagation();dbOpenClient(\'' + enc + '\')" style="' + btnBase + 'border-right:1px solid #f3f4f6;border-radius:0 0 0 14px;">🌳 Ver árboles</button>';
+      html += '<button onclick="event.stopPropagation();openDocsModal(\'' + enc + '\')" style="' + btnBase + 'border-radius:0 0 14px 0;">📁 Archivos</button>';
+      html += '<button onclick="event.stopPropagation();dbExportClientPDF(\'' + enc + '\')" style="' + btnBase + 'border-right:1px solid #f3f4f6;border-top:1px solid #f3f4f6;color:#1d4ed8;border-radius:0;">📄 PDF</button>';
+      html += '<button onclick="event.stopPropagation();if(confirm(\'¿Eliminar cliente ' + c.name.replace(/'/g,"\\'") + '?\'))deleteClientFromRecords(\'' + enc + '\')" style="' + btnBase + 'border-top:1px solid #f3f4f6;color:#b91c1c;border-radius:0 0 14px 0;">🗑 Eliminar</button>';
+      html += '</div>';
+
+      html += '</div>'; // card end
     });
 
     container.innerHTML = html;
