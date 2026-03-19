@@ -283,7 +283,9 @@
   window.dbOpenClient = function (encodedName) {
     _dbClient = decodeURIComponent(encodedName);
     _dbRisk = null;
+    window._lv2PortalCfg = {}; // reset portal cache
     window.dbNav(2);
+    _loadLv2PortalConfig(); // async load portal visibility config
   };
 
   window.dbExportClientPDF = function (encodedName) {
@@ -458,6 +460,15 @@
     var container = document.getElementById('db-lv2-list');
     if (!container) return;
 
+    // FORCE container style (bypass CSS cache)
+    container.style.display       = 'block';
+    container.style.flexDirection = '';
+    container.style.gap           = '';
+    container.style.overflowY     = 'auto';
+    container.style.padding       = '12px 14px 100px';
+    container.style.flex          = '1';
+    container.style.minHeight     = '0';
+
     // Update breadcrumb
     var titleEl = document.getElementById('db-lv2-title');
     if (titleEl) titleEl.textContent = _dbClient || 'Cliente';
@@ -514,87 +525,125 @@
 
     trees.sort(function (a, b) { return (a.aid || '').localeCompare(b.aid || ''); });
 
+    // ── Inline style constants ──
+    var CARD_BASE = 'display:block;width:100%;box-sizing:border-box;background:#fff;border-radius:14px;margin-bottom:14px;box-shadow:0 2px 10px rgba(0,0,0,.07);overflow:visible;font-family:\'IBM Plex Sans\',sans-serif;border:1.5px solid #e5e7eb;';
+    var BTN = 'display:flex;align-items:center;justify-content:center;gap:4px;padding:10px 8px;background:#fff;border:none;border-top:1px solid #f3f4f6;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;width:100%;box-sizing:border-box;';
+    var RCOLORS = { bajo: '#22c55e', moderado: '#f59e0b', alto: '#f97316', extremo: '#b91c1c' };
+
+    // Load portal config for this client (async, updates cards after load)
+    var _portalCfgCache = window._lv2PortalCfg || {};
+
     var html = '';
     trees.forEach(function (t) {
       var ev = t.latest.ev;
+      var ans = ev.answers || {};
       var key = t.latest.key;
       var risk = getEffRisk(ev);
       var color = getRiskColor(risk);
       var label = getRiskLabel(risk);
       var _st = window.APP && window.APP.selectedTrees;
       var selected = _st && (typeof _st.has === 'function' ? _st.has(key) : _st.indexOf(key) !== -1);
+      var arbolId = ev.arbolId || ans.arbolId || key;
+      var especie = ev.especie || ans.especie || '—';
+      var evaluador = ev.evaluador || ans.evaluador || '—';
+      var fecha = fmtDate(ev.timestamp || ev.ts);
 
-      var gpsHtml = '';
-      var gpsRaw = (typeof window._normalizeGPS === 'function') ? window._normalizeGPS(ev) : (ev.gps || '');
-      if (gpsRaw) {
-        var gpsParts2 = String(gpsRaw).split(',');
-        var gpsLat2 = parseFloat(gpsParts2[0]);
-        var gpsLng2 = parseFloat(gpsParts2[1]);
-        if (!isNaN(gpsLat2) && !isNaN(gpsLng2)) {
-          gpsHtml = '<span class="tc-gps">📍 ' + gpsLat2.toFixed(5) + ', ' + gpsLng2.toFixed(5) + '</span>';
-        }
-      }
+      // GPS (supports string, object, legacy)
+      var gpsStr = '';
+      var gpsRaw = (typeof window._normalizeGPS === 'function') ? window._normalizeGPS(ev)
+        : (ev.gps || ans.gps || (ev.lat ? ev.lat + ',' + ev.lng : null) || '');
+      if (gpsRaw && typeof gpsRaw === 'object' && gpsRaw.lat) gpsStr = gpsRaw.lat.toFixed(5) + ',' + gpsRaw.lng.toFixed(5);
+      else if (gpsRaw) gpsStr = String(gpsRaw);
 
-      html += '<div class="tree-card" style="border-left:4px solid ' + color + ';">';
-
-      // Checkbox row
-      html += '<div style="padding:8px 14px 0;display:flex;align-items:center;gap:8px;">';
-      html += '<input type="checkbox" ' + (selected ? 'checked' : '') + ' onclick="toggleSelection(event,\'' + key + '\')" style="width:16px;height:16px;accent-color:' + color + ';cursor:pointer;">';
-      html += '<span style="font-family:\'IBM Plex Mono\',monospace;font-size:10px;font-weight:700;color:#1d4ed8;">' + (ev.arbolId || key) + '</span>';
-      html += '<span class="tc-eval-badge">' + t.count + ' eval' + (t.count > 1 ? 's' : '') + '</span>';
-      var nP = (window.FB ? window.FB.getPhotoUrls(ev) : (ev.photoUrls || ev.photos || [])).filter(function (u) { return u && typeof u === 'string'; }).length;
-      if (nP > 0) html += '<span style="font-size:10px;color:#7a746e;margin-left:auto;">📷 ' + nP + '</span>';
-      html += '</div>';
-
-      // Head
-      html += '<div class="tc-head" onclick="showTreeDetail(\'' + key + '\')">';
-      html += '<div class="tc-risk-dot trd-' + risk + '">🌳</div>';
-      html += '<div class="tc-info">';
-      html += '<span class="tc-species">' + safeVal(ev.especie) + '</span>';
-      html += '<span class="tc-id">' + safeVal(ev.evaluador) + ' · ' + fmtDate(ev.timestamp) + '</span>';
-      html += '</div>';
-      html += '<div class="tc-chevron">›</div>';
-      html += '</div>';
-
-      // Body
-      // Body — clickable main area
-      html += '<div class="tc-body" onclick="showTreeDetail(\'' + key + '\')">';
-
-      // GPS chip if available
-      if (gpsHtml) {
-        html += '<div style="margin-bottom:6px;">' + gpsHtml + '</div>';
-      }
-
-      // Risk pills per section
-      html += '<div class="tc-pills">';
-      var dianasKeys = ['copa_dianas', 'tronco_dianas', 'raices_dianas'];
-      var dianasLabels = { copa_dianas: 'Copa', tronco_dianas: 'Tronco', raices_dianas: 'Raíces' };
-      dianasKeys.forEach(function (dk) {
-        if (ev[dk] && ev[dk].length) {
-          ev[dk].forEach(function (d) {
-            if (d.riesgo) {
-              html += '<span class="tc-pill tp-' + d.riesgo + '">' + dianasLabels[dk] + ': ' + getRiskLabel(d.riesgo) + '</span>';
+      // Diana groups (check both ev and ev.answers)
+      var DIANA_KEYS = ['copa_dianas', 'tronco_dianas', 'raices_dianas'];
+      var DIANA_LABELS = { copa_dianas: 'Copa', tronco_dianas: 'Tronco', raices_dianas: 'Raíces' };
+      var dianaPills = '';
+      var hasDianas = false;
+      DIANA_KEYS.forEach(function (dk) {
+        var d = ev[dk] || ans[dk] || [];
+        if (d && d.length) {
+          hasDianas = true;
+          d.forEach(function (item) {
+            if (item && item.riesgo) {
+              var dc = getRiskColor(item.riesgo);
+              dianaPills += '<span style="background:' + dc + '18;color:' + dc + ';border:1px solid ' + dc + '55;border-radius:20px;padding:2px 8px;font-size:10px;font-weight:700;margin:2px;">' + DIANA_LABELS[dk] + ': ' + getRiskLabel(item.riesgo) + '</span>';
             }
           });
         }
       });
-      if (!ev.copa_dianas && !ev.tronco_dianas && !ev.raices_dianas) {
-        html += '<span class="tc-pill tp-' + risk + '">' + label + '</span>';
-      }
-      html += '</div>';
-      html += '</div>'; // tc-body
 
-      // Bottom action strip — stopPropagation so it doesn't open detail
-      html += '<div class="tc-actions">';
-      html += '<button class="tc-act-btn tc-act-detail" onclick="event.stopPropagation();showTreeDetail(\'' + key + '\')">🔍 Ver detalle</button>';
-      if (gpsHtml) {
-        html += '<button class="tc-act-btn tc-act-map" onclick="event.stopPropagation();switchTab(\'home\');setTimeout(function(){window.setActiveClient&&setActiveClient(encodeURIComponent(\'' + (ev.cliente || '').replace(/'/g, '') + '\'));setTimeout(function(){window.openMASFromKey&&openMASFromKey(\'' + key + '\')},300)},100)">🗺️ Mapa</button>';
-      }
-      html += '<button class="tc-act-btn tc-act-hist" onclick="event.stopPropagation();dbOpenTree(\'' + encodeURIComponent(t.aid) + '\')">↺ Historial</button>';
-      html += '<button class="tc-act-btn tc-act-del" onclick="event.stopPropagation();deleteTree(\'' + encodeURIComponent(t.aid) + '\')">🗑</button>';
+      // ISA summary
+      var isaScore = ev.isaImpacto !== undefined && ev.isaImpacto !== null ? (parseFloat(ev.isaImpacto) * 100).toFixed(0) + '%' : null;
+      var bioMargin = ev.bioMargin !== undefined && ev.bioMargin !== null ? parseFloat(ev.bioMargin).toFixed(2) : null;
+
+      // Photos
+      var photos = (window.FB ? window.FB.getPhotoUrls(ev) : (ev.photoUrls || ans.photoUrls || [])).filter(function (u) { return u && typeof u === 'string'; });
+
+      // Portal visibility for this tree
+      var fsArbol = (arbolId + '').replace(/[.#$[\]/]/g, '_');
+      var fsCli = (_dbClient || '').replace(/[.#$[\]/]/g, '_');
+      var portalKey = fsCli + '_' + fsArbol;
+      var portalVisible = _portalCfgCache[portalKey] === true;
+
+      // ── CARD HTML ──
+      html += '<div id="tc-' + key + '" style="' + CARD_BASE + 'border-left:4px solid ' + color + ';">';
+
+      // Top row: checkbox + ID + risk badge + portal toggle
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:10px 14px 8px;">';
+      html += '<input type="checkbox" ' + (selected ? 'checked' : '') + ' onclick="toggleSelection(event,\'' + key + '\')" style="width:17px;height:17px;accent-color:' + color + ';cursor:pointer;flex-shrink:0;">';
+      html += '<span style="font-family:\'IBM Plex Mono\',monospace;font-size:12px;font-weight:700;color:#1d4ed8;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">🌳 ' + arbolId + '</span>';
+      html += '<span style="background:' + color + ';color:#fff;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:800;text-transform:uppercase;flex-shrink:0;">' + label + '</span>';
+      // Portal toggle button
+      html += '<button onclick="event.stopPropagation();dbTogglePortalTree(\'' + fsCli + '\',\'' + fsArbol + '\',this)" title="' + (portalVisible ? 'Visible al cliente' : 'Oculto al cliente') + '" style="background:' + (portalVisible ? '#dcfce7' : '#f3f4f6') + ';color:' + (portalVisible ? '#15803d' : '#9ca3af') + ';border:1.5px solid ' + (portalVisible ? '#86efac' : '#e5e7eb') + ';border-radius:8px;padding:4px 8px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0;">' + (portalVisible ? '👁 Portal' : '🚫 Portal') + '</button>';
       html += '</div>';
 
-      html += '</div>'; // tree-card
+      // Species + evaluator + date
+      html += '<div onclick="showTreeDetail(\'' + key + '\')" style="padding:0 14px 10px;cursor:pointer;">';
+      html += '<div style="font-family:Georgia,serif;font-size:15px;font-weight:700;color:#111827;margin-bottom:4px;">' + especie + '</div>';
+      html += '<div style="font-size:11px;color:#6b7280;display:flex;gap:10px;flex-wrap:wrap;">';
+      html += '<span>👤 ' + evaluador + '</span>';
+      html += '<span>📅 ' + fecha + '</span>';
+      if (t.count > 1) html += '<span style="color:#1d4ed8;font-weight:700;">↺ ' + t.count + ' evaluaciones</span>';
+      if (photos.length) html += '<span>📷 ' + photos.length + ' foto' + (photos.length !== 1 ? 's' : '') + '</span>';
+      html += '</div>';
+      html += '</div>';
+
+      // GPS
+      if (gpsStr) {
+        var gp = gpsStr.split(',');
+        html += '<div style="padding:0 14px 8px;font-size:11px;color:#1d4ed8;font-family:\'IBM Plex Mono\',monospace;">📍 ' + (parseFloat(gp[0])||0).toFixed(5) + ', ' + (parseFloat(gp[1])||0).toFixed(5) + '</div>';
+      }
+
+      // ISA results row
+      if (isaScore || bioMargin) {
+        html += '<div style="padding:8px 14px;background:#f9fafb;border-top:1px solid #f3f4f6;border-bottom:1px solid #f3f4f6;display:flex;gap:14px;flex-wrap:wrap;">';
+        if (isaScore) html += '<span style="font-size:11px;"><span style="font-weight:700;color:#374151;">ISA Impacto:</span> <span style="color:' + color + ';font-weight:700;">' + isaScore + '</span></span>';
+        if (bioMargin) html += '<span style="font-size:11px;"><span style="font-weight:700;color:#374151;">Margen bio:</span> <span style="font-weight:600;">' + bioMargin + ' cm</span></span>';
+        html += '</div>';
+      }
+
+      // Diana pills
+      if (hasDianas) {
+        html += '<div style="padding:8px 14px;display:flex;flex-wrap:wrap;gap:4px;">' + dianaPills + '</div>';
+      } else {
+        html += '<div style="padding:6px 14px;"><span style="background:' + color + '18;color:' + color + ';border:1px solid ' + color + '55;border-radius:20px;padding:2px 8px;font-size:10px;font-weight:700;">Riesgo General: ' + label + '</span></div>';
+      }
+
+      // Action buttons (2×2 grid)
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;border-top:1px solid #f3f4f6;">';
+      html += '<button onclick="event.stopPropagation();showTreeDetail(\'' + key + '\')" style="' + BTN + 'color:#0f3320;border-radius:0 0 0 12px;">🔍 Detalle</button>';
+      if (gpsStr) {
+        var encCliente = encodeURIComponent(_dbClient || '');
+        html += '<button onclick="event.stopPropagation();switchTab(\'home\');setTimeout(function(){window.setActiveClient&&setActiveClient(\'' + encCliente + '\');setTimeout(function(){window.openMASFromKey&&openMASFromKey(\'' + key + '\')},300)},100)" style="' + BTN + 'color:#1d4ed8;">🗺️ Mapa</button>';
+      } else {
+        html += '<button style="' + BTN + 'color:#9ca3af;cursor:not-allowed;" disabled>🗺️ GPS</button>';
+      }
+      html += '<button onclick="event.stopPropagation();dbOpenTree(\'' + encodeURIComponent(t.aid) + '\')" style="' + BTN + 'color:#7c3aed;">↺ Historial</button>';
+      html += '<button onclick="event.stopPropagation();if(confirm(\'¿Eliminar árbol ' + arbolId.replace(/'/g,"\\'") + '?\'))deleteTree(\'' + encodeURIComponent(t.aid) + '\')" style="' + BTN + 'color:#b91c1c;border-radius:0 0 12px 0;">🗑 Borrar</button>';
+      html += '</div>';
+
+      html += '</div>'; // card end
     });
 
     container.innerHTML = html;
@@ -610,6 +659,48 @@
         ' · 📍 ' + withGps + ' con GPS';
     }
   };
+
+  // ── Quick portal tree toggle from Level 2 ──
+  window._lv2PortalCfg = {};
+
+  window.dbTogglePortalTree = function (clientKey, arbolKey, btn) {
+    var portalKey = clientKey + '_' + arbolKey;
+    var isNowVisible = window._lv2PortalCfg[portalKey] !== true;
+    window._lv2PortalCfg[portalKey] = isNowVisible;
+
+    // Update button UI
+    if (btn) {
+      btn.textContent = isNowVisible ? '👁 Portal' : '🚫 Portal';
+      btn.style.background = isNowVisible ? '#dcfce7' : '#f3f4f6';
+      btn.style.color = isNowVisible ? '#15803d' : '#9ca3af';
+      btn.style.border = '1.5px solid ' + (isNowVisible ? '#86efac' : '#e5e7eb');
+    }
+
+    // Save to Firebase
+    if (typeof window._fbSetPortalTree === 'function') {
+      window._fbSetPortalTree(clientKey, arbolKey, { visible: isNowVisible });
+    }
+    window.showNotif && window.showNotif(isNowVisible ? '👁 Árbol ahora visible al cliente' : '🚫 Árbol ocultado al cliente');
+  };
+
+  // Load portal config for current client (called when entering Level 2)
+  function _loadLv2PortalConfig() {
+    if (!_dbClient) return;
+    var clientKey = _dbClient.replace(/[.#$[\]/]/g, '_');
+    if (typeof window._fbGetPortalConfig === 'function') {
+      window._fbGetPortalConfig(clientKey, function (snap) {
+        var data = snap && snap.val ? snap.val() : null;
+        window._lv2PortalCfg = {};
+        if (data && data.trees) {
+          Object.keys(data.trees).forEach(function (ak) {
+            window._lv2PortalCfg[clientKey + '_' + ak] = data.trees[ak].visible === true;
+          });
+        }
+        // Re-render to show updated portal state
+        window.dbRenderLv2();
+      });
+    }
+  }
 
   window.dbSetRisk = function (btn, lvl) {
     _dbRisk = (_dbRisk === lvl) ? null : lvl;
