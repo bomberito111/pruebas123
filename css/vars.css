@@ -111,7 +111,7 @@
   --sidebar-w: 0px; /* desktop sidebar width — overridden in media query */
 }
 
-/* ── iPhone 17 Pro Max & notched iPhones — safe area top ── */
+/* ── Safe area insets (iPhone notch / Dynamic Island) ── */
 @supports (padding-top: env(safe-area-inset-top)) {
   :root {
     --safe-top:    env(safe-area-inset-top,    0px);
@@ -119,11 +119,17 @@
   }
 }
 
-/* ── Desktop layout (≥ 900px wide) ── */
-@media (min-width: 900px) {
+/* ── Tablet / medium screens (≥ 600px): full width, bottom nav stays ── */
+@media (min-width: 600px) {
   :root {
     --app-max-w: 100vw;
-    --nav-h:     0px;    /* bottom nav hidden on desktop */
+  }
+}
+
+/* ── Desktop sidebar layout (≥ 1024px) ── */
+@media (min-width: 1024px) {
+  :root {
+    --nav-h:     0px;
     --header-h:  56px;
     --sidebar-w: 220px;
   }

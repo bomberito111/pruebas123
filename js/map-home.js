@@ -254,7 +254,13 @@ window.startHomeGPSTracking = function () {
       }
     },
     function (err) {
-      console.warn('GPS tracking error:', err.message);
+      // Only warn once — PERMISSION_DENIED (code 1) won't resolve on retry
+      if (err.code === 1) {
+        navigator.geolocation.clearWatch(_homeWatchId);
+        _homeWatchId = null;
+      } else {
+        console.warn('GPS tracking error:', err.message);
+      }
     },
     { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
   );

@@ -17,13 +17,36 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <!-- App CSS (chained: components imports layout imports base imports vars) -->
-<link rel="stylesheet" href="css/components.css">
+<link rel="stylesheet" href="css/components.css?v=7">
 
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;overflow:hidden}
 body{font-family:'IBM Plex Sans',system-ui,sans-serif;background:var(--paper,#faf9f5);color:var(--ink,#1a1a1a);display:flex;flex-direction:column}
+/* Mobile default: centered max 480px */
 #app{display:flex;flex-direction:column;height:100%;overflow:hidden;max-width:480px;margin:0 auto;width:100%;position:relative}
+/* Tablet/medium (≥600px): expand to full viewport, bottom nav stays */
+@media(min-width:600px){
+  #app{max-width:none;margin:0;width:100%}
+  #dbLv1List,#dbLv2List{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;align-items:start}
+}
+/* Desktop (≥1024px): sidebar layout */
+@media(min-width:1024px){
+  #app{max-width:none;margin:0;width:100%}
+  .app-header{left:220px!important;width:calc(100% - 220px)!important;max-width:none!important;transform:none!important}
+  .views-wrap{margin-left:220px!important;padding-bottom:0!important;padding-top:var(--header-h,56px)!important}
+  #mainNav{position:fixed!important;top:0!important;left:0!important;right:auto!important;bottom:0!important;width:220px!important;max-width:220px!important;height:100vh!important;display:flex!important;flex-direction:column!important;border-top:none!important;border-right:1px solid var(--border,#d4cfc5)!important;transform:none!important;padding-bottom:0!important;box-shadow:1px 0 12px rgba(0,0,0,.08)!important;overflow-y:auto!important;justify-content:flex-start!important;align-items:stretch!important;background:#fff!important;z-index:300!important}
+  #mainNav::before{content:'🌳 Bosques Urbanos';display:flex;align-items:center;min-height:60px;padding:0 18px;font-family:'Fraunces',Georgia,serif;font-size:14px;font-weight:700;color:#0f3320;border-bottom:1px solid var(--border,#d4cfc5);white-space:nowrap;flex-shrink:0}
+  .nav-tab{flex:none!important;width:100%!important;flex-direction:row!important;align-items:center!important;justify-content:flex-start!important;gap:12px!important;padding:15px 20px!important;font-size:13px!important;text-align:left!important;border-bottom:1px solid var(--border-light,#ece8e0)!important;border-radius:0!important}
+  .nav-tab::before{display:none!important}
+  .nav-tab.active{background:var(--forest-50,#f0fdf4)!important;border-left:3px solid #166534!important;padding-left:17px!important;color:#0f3320!important}
+  .nav-icon{font-size:20px!important;flex-shrink:0!important}
+  #dbLv1List,#dbLv2List{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;align-items:start}
+  .modal-sheet{max-width:640px!important;margin:auto!important;border-radius:16px!important;max-height:85vh!important}
+  .form-scroll{max-width:700px!important;margin:0 auto!important;padding:0 24px!important}
+  .db-header{padding:16px 32px!important}
+  .db-scroll{padding:16px 32px!important}
+}
 @media print{body>*:not(#print-container){display:none!important}#print-container{display:block!important;position:static;width:100%;background:#fff;padding:20px;color:#000;overflow:visible}@page{margin:1.5cm}}
 #print-container{display:none}
 </style>

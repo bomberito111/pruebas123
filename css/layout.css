@@ -3,7 +3,7 @@
    layout.css  |  Depends on base.css → vars.css
    ============================================================ */
 
-@import './base.css';
+@import './base.css?v=7';
 
 
 /* ----------------------------------------------------------
@@ -777,62 +777,83 @@
 
 
 /* ============================================================
-   RESPONSIVE — iPhone 17 Pro Max / notched iPhones
-   Ensure Dynamic Island / notch safe area is respected
+   RESPONSIVE — iPhone / notched iPhones (Dynamic Island safe area)
+   These rules apply to ALL screen sizes — the env() values are
+   0px on non-notched devices so they have no effect there.
    ============================================================ */
 .app-header {
-  padding-top: max(0px, env(safe-area-inset-top, 0px));
+  padding-top: env(safe-area-inset-top, 0px);
   height: calc(var(--header-h) + env(safe-area-inset-top, 0px));
 }
 
 .views-wrap {
-  padding-top: calc(var(--header-h) + env(safe-area-inset-top, 0px));
+  padding-top:    calc(var(--header-h) + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(var(--nav-h)    + env(safe-area-inset-bottom, 0px));
 }
 
 .bottom-nav {
   height: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px));
 }
 
-.views-wrap {
-  padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px));
+
+/* ============================================================
+   RESPONSIVE — Tablet / medium screens (≥ 600px)
+   App expands to fill the full viewport. Bottom nav stays.
+   Mobile design is preserved — only the width cap is lifted.
+   ============================================================ */
+@media (min-width: 600px) {
+
+  /* Expand app to fill the full viewport */
+  #app {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+  }
+
+  /* Header & nav already use --app-max-w which is now 100vw */
+
+  /* Records: 2-column card grid on tablet */
+  #dbLv1List,
+  #dbLv2List {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+    align-items: start;
+  }
 }
 
 
 /* ============================================================
-   RESPONSIVE — Desktop layout (≥ 900px)
-   Left sidebar replaces bottom nav. Content expands full width.
+   RESPONSIVE — Desktop (≥ 1024px)
+   Left sidebar replaces bottom nav. Full desktop layout.
    ============================================================ */
-@media (min-width: 900px) {
+@media (min-width: 1024px) {
 
-  /* ── App shell: full viewport, column layout ── */
+  /* App fills full viewport */
   #app {
-    flex-direction: column;
-    width: 100vw;
-    max-width: 100vw;
-    height: 100vh;
+    width: 100%;
+    max-width: none;
     margin: 0;
   }
 
-  /* ── Header: starts after sidebar ── */
+  /* Header shifts right of sidebar */
   .app-header {
     left: var(--sidebar-w);
-    width: calc(100vw - var(--sidebar-w));
+    width: calc(100% - var(--sidebar-w));
     max-width: none;
     transform: none;
     height: var(--header-h);
     padding-top: 0;
   }
 
-  /* ── Views wrap: fill all space to the right of sidebar ── */
+  /* Content area shifts right of sidebar, no bottom padding */
   .views-wrap {
     margin-left: var(--sidebar-w);
-    width: calc(100vw - var(--sidebar-w));
     padding-bottom: 0;
     padding-top: var(--header-h);
-    flex: 1;
   }
 
-  /* ── Left sidebar navigation (replaces bottom nav) ── */
+  /* ── Left sidebar ── */
   #mainNav {
     position: fixed;
     top: 0;
@@ -842,43 +863,45 @@
     width: var(--sidebar-w);
     max-width: var(--sidebar-w);
     height: 100vh;
+    display: flex;
     flex-direction: column;
     border-top: none;
     border-right: 1px solid var(--border);
     transform: none;
     padding-bottom: 0;
-    box-shadow: 1px 0 8px rgba(0,0,0,0.06);
+    box-shadow: 1px 0 12px rgba(0,0,0,0.08);
     overflow-y: auto;
     justify-content: flex-start;
     align-items: stretch;
     background: var(--white);
     z-index: 300;
-    display: flex;
   }
 
-  /* Sidebar logo area */
+  /* Sidebar logo title */
   #mainNav::before {
     content: '🌳 Bosques Urbanos';
     display: flex;
     align-items: center;
-    padding: 20px 16px 16px;
+    min-height: 60px;
+    padding: 0 18px;
     font-family: var(--font-serif);
     font-size: 14px;
     font-weight: 700;
     color: var(--forest-800);
     border-bottom: 1px solid var(--border);
     white-space: nowrap;
-    overflow: hidden;
+    flex-shrink: 0;
   }
 
-  /* Sidebar nav tabs: vertical stack */
+  /* Nav tabs become vertical rows */
   .nav-tab {
     flex: none;
+    width: 100%;
     flex-direction: row;
     align-items: center;
     justify-content: flex-start;
     gap: 12px;
-    padding: 14px 20px;
+    padding: 15px 20px;
     font-size: 13px;
     letter-spacing: 0.02em;
     text-align: left;
@@ -886,73 +909,57 @@
     border-radius: 0;
   }
 
-  .nav-tab::before {
-    display: none; /* hide top bar indicator */
-  }
+  /* Hide the top indicator bar on sidebar tabs */
+  .nav-tab::before { display: none; }
 
-  /* Active tab: left accent bar on desktop */
+  /* Active tab: green left accent */
   .nav-tab.active {
     background: var(--forest-50);
     border-left: 3px solid var(--forest-700);
     padding-left: 17px;
+    color: var(--forest-800);
   }
 
-  .nav-icon {
-    font-size: 20px;
-    flex-shrink: 0;
-  }
+  .nav-icon { font-size: 20px; flex-shrink: 0; }
 
-  /* ── Map view on desktop: wider ── */
-  #homeMapWrap {
-    min-height: 100%;
-  }
-
-  /* ── Records on desktop: two-column cards ── */
+  /* Records: grid with larger tiles */
   #dbLv1List,
   #dbLv2List {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 12px;
+    gap: 16px;
     align-items: start;
   }
 
-  /* ── Modals on desktop: centered and wider ── */
+  /* Modals: wider and centered */
   .modal-sheet {
-    max-width: 600px;
+    max-width: 640px;
     margin: auto;
     border-radius: var(--r-lg);
     max-height: 85vh;
   }
 
-  /* ── Form on desktop: centered column ── */
+  /* Form: centered readable column */
   .form-scroll {
-    max-width: 680px;
+    max-width: 700px;
     margin: 0 auto;
-    padding: 0 var(--s4);
+    padding: 0 var(--s6);
   }
 
-  /* ── DB header on desktop: more padding ── */
-  .db-header {
-    padding: var(--s4) var(--s6, 32px);
-  }
-
-  .db-scroll {
-    padding: var(--s4) var(--s6, 32px);
-  }
+  /* DB sections: more horizontal breathing room */
+  .db-header { padding: var(--s4) 32px; }
+  .db-scroll  { padding: var(--s4) 32px; }
 }
 
 
 /* ============================================================
    RESPONSIVE — Large desktop (≥ 1400px)
-   Wider sidebar and content columns
    ============================================================ */
 @media (min-width: 1400px) {
-  :root {
-    --sidebar-w: 260px;
-  }
+  :root { --sidebar-w: 240px; }
 
   #dbLv1List,
   #dbLv2List {
-    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   }
 }

@@ -3,7 +3,7 @@
    components.css  |  Depends on layout.css → base.css → vars.css
    ============================================================ */
 
-@import './layout.css';
+@import './layout.css?v=7';
 
 
 /* ============================================================
