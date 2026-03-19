@@ -980,11 +980,13 @@ var _devSelPath    = null;     // dotted path within _devData of selected node
 var _devExpanded   = {};       // set of expanded node paths
 
 var _devTabPaths = {
-  eval:     'evaluaciones',
-  clientes: 'clientes',
-  archivos: 'archivos',
-  usuarios: 'usuarios',
-  custom:   null
+  eval:       'evaluaciones',
+  clientes:   'clientes',
+  archivos:   'archivos',
+  usuarios:   'usuarios',
+  online:     'presencia',
+  servidores: null,
+  custom:     null
 };
 
 window.openDevConsole = function () {
@@ -1019,6 +1021,10 @@ window.devSetTab = function (tab) {
 };
 
 window.devLoad = async function () {
+  // Special tabs with custom renderers
+  if (_devTab === 'servidores') { _devRenderServidores(); return; }
+  if (_devTab === 'online')     { _devRenderOnline();     return; }
+
   var pathEl = document.getElementById('devPathInput');
   var rawPath = (pathEl ? pathEl.value.trim() : '') || '/';
   // Normalize
@@ -1044,6 +1050,130 @@ window.devLoad = async function () {
 };
 
 window.devRefresh = window.devLoad;
+
+// ── 🌐 SERVIDORES tab ──────────────────────────────────────────
+function _devRenderServidores() {
+  var treeEl  = document.getElementById('devTree');
+  var statusEl = document.getElementById('devStatus');
+  if (statusEl) statusEl.textContent = '🌐 Configuración de servidores';
+
+  var projectId = window._FIREBASE_PROJECT_ID || 'appp-1ed52';
+  var dbUrl      = window._FIREBASE_DB_URL     || 'https://appp-1ed52-default-rtdb.firebaseio.com';
+  var cloudName  = window.CLOUDINARY_CLOUD_NAME    || '';
+  var preset     = window.CLOUDINARY_UPLOAD_PRESET  || '';
+  var ghPages    = 'https://bomberito111.github.io/pruebas/';
+  var ghRepo     = 'https://github.com/bomberito111/pruebas';
+
+  var s = function(label, href, color) {
+    return '<a href="' + href + '" target="_blank" style="display:flex;align-items:center;gap:10px;padding:12px 14px;' +
+      'background:' + (color||'#111') + ';border:1px solid #1f2937;border-radius:10px;text-decoration:none;' +
+      'color:#d1fae5;font-weight:700;font-size:12px;margin-bottom:8px;transition:opacity .15s;" ' +
+      'onmouseover="this.style.opacity=.8" onmouseout="this.style.opacity=1">' +
+      label + '<span style="margin-left:auto;font-size:10px;color:#4b5563">Abrir →</span></a>';
+  };
+
+  treeEl.innerHTML = [
+    '<div style="max-width:680px">',
+
+    '<div style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#4ade80;margin-bottom:10px;padding:8px 0 4px;border-bottom:1px solid #1f2937">🔥 Firebase</div>',
+    s('🔥 Firebase Console — Base de datos', 'https://console.firebase.google.com/project/' + projectId + '/database/' + projectId + '-default-rtdb/data', '#0f1f0f'),
+    s('📊 Firebase Analytics', 'https://console.firebase.google.com/project/' + projectId + '/analytics', '#0f1a1a'),
+    s('🗄️ Firebase Storage', 'https://console.firebase.google.com/project/' + projectId + '/storage', '#0f1a1a'),
+    s('⚙️ Firebase Settings', 'https://console.firebase.google.com/project/' + projectId + '/settings/general', '#0f1a1a'),
+
+    '<div style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#fbbf24;margin-bottom:10px;padding:16px 0 4px;border-bottom:1px solid #1f2937">☁️ Cloudinary (almacenamiento gratuito 25 GB)</div>',
+    s('🖼️ Cloudinary Media Library', 'https://cloudinary.com/console/media_library', '#1a1400'),
+    s('📈 Cloudinary Usage & Billing', 'https://cloudinary.com/console/settings', '#1a1400'),
+
+    '<div style="background:#111;border:1px solid #374151;border-radius:10px;padding:14px;margin-bottom:8px">',
+    '<div style="font-size:10px;color:#fbbf24;font-weight:700;margin-bottom:10px">⚙️ Configurar Cloudinary (guarda en Firebase)</div>',
+    '<input id="devCloudName" value="' + _escDev(cloudName) + '" placeholder="Cloud Name (ej: bosques-urbanos)" ' +
+      'style="width:100%;box-sizing:border-box;background:#0a0a0a;border:1px solid #374151;border-radius:6px;padding:8px 10px;color:#d1fae5;font-family:\'IBM Plex Mono\',monospace;font-size:11px;margin-bottom:6px;outline:none">',
+    '<input id="devUploadPreset" value="' + _escDev(preset) + '" placeholder="Upload Preset sin firma (ej: bosques_preset)" ' +
+      'style="width:100%;box-sizing:border-box;background:#0a0a0a;border:1px solid #374151;border-radius:6px;padding:8px 10px;color:#d1fae5;font-family:\'IBM Plex Mono\',monospace;font-size:11px;margin-bottom:8px;outline:none">',
+    '<button onclick="_devSaveCloudinary()" style="padding:8px 16px;background:#065f46;color:#6ee7b7;border:none;border-radius:6px;font-weight:700;font-size:11px;cursor:pointer;font-family:\'IBM Plex Mono\',monospace">💾 Guardar configuración Cloudinary</button>',
+    '<div id="devCloudinaryStatus" style="font-size:10px;color:#4b5563;margin-top:6px"></div>',
+    '</div>',
+
+    '<div style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#93c5fd;margin-bottom:10px;padding:16px 0 4px;border-bottom:1px solid #1f2937">🐙 GitHub</div>',
+    s('🐙 Repositorio GitHub', ghRepo, '#0a0f1a'),
+    s('🌐 App en vivo (GitHub Pages)', ghPages, '#0a0f1a'),
+
+    '<div style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#c084fc;margin-bottom:10px;padding:16px 0 4px;border-bottom:1px solid #1f2937">📡 Firebase Realtime DB — URL directa</div>',
+    '<div style="background:#0a0a0a;border:1px solid #1f2937;border-radius:8px;padding:10px 12px;font-size:11px;color:#6ee7b7;margin-bottom:8px;word-break:break-all">' + _escDev(dbUrl) + '</div>',
+
+    '</div>'
+  ].join('');
+}
+
+window._devSaveCloudinary = async function() {
+  var name   = (document.getElementById('devCloudName')    || {}).value || '';
+  var preset = (document.getElementById('devUploadPreset') || {}).value || '';
+  var st = document.getElementById('devCloudinaryStatus');
+  if (!name || !preset) { if (st) st.textContent = '⚠️ Completa ambos campos'; return; }
+  if (st) st.textContent = '⏳ Guardando...';
+  try {
+    await window._fbSetConfig('cloudinary', { cloudName: name, uploadPreset: preset });
+    window.CLOUDINARY_CLOUD_NAME    = name;
+    window.CLOUDINARY_UPLOAD_PRESET = preset;
+    if (st) st.style.color = '#4ade80', st.textContent = '✅ Guardado. Cloudinary activo.';
+  } catch(e) {
+    if (st) st.style.color = '#f87171', st.textContent = '❌ Error: ' + e.message;
+  }
+};
+
+// ── 👁 EN LÍNEA tab ──────────────────────────────────────────
+var _devOnlineUnsub = null;
+function _devRenderOnline() {
+  var treeEl   = document.getElementById('devTree');
+  var statusEl = document.getElementById('devStatus');
+  if (statusEl) statusEl.textContent = '👁 Monitoreando usuarios en tiempo real...';
+  if (treeEl)   treeEl.innerHTML = '<span style="color:#4b5563">Conectando a Firebase Presence...</span>';
+
+  // Unsubscribe previous listener
+  if (_devOnlineUnsub && typeof _devOnlineUnsub === 'function') { _devOnlineUnsub(); _devOnlineUnsub = null; }
+
+  if (typeof window._fbOnPresence !== 'function') {
+    treeEl.innerHTML = '<span style="color:#f87171">Firebase presencia no disponible</span>';
+    return;
+  }
+  _devOnlineUnsub = window._fbOnPresence(function(snap) {
+    var data = snap && snap.val ? snap.val() : null;
+    var sessions = data ? Object.entries(data) : [];
+    // Update tab badge
+    var tabBtn = document.getElementById('devTabOnline');
+    if (tabBtn) tabBtn.textContent = '🟢 En línea (' + sessions.length + ')';
+    if (statusEl) statusEl.textContent = '🟢 ' + sessions.length + ' sesión' + (sessions.length !== 1 ? 'es' : '') + ' activa' + (sessions.length !== 1 ? 's' : '');
+
+    if (!treeEl) return;
+    if (sessions.length === 0) {
+      treeEl.innerHTML = '<div style="padding:40px;text-align:center;color:#4b5563">Sin usuarios conectados ahora mismo</div>';
+      return;
+    }
+    var now = Date.now();
+    treeEl.innerHTML = [
+      '<div style="max-width:680px">',
+      '<div style="font-size:10px;color:#4b5563;margin-bottom:12px">Actualización en tiempo real · ' + new Date().toLocaleTimeString() + '</div>',
+      sessions.sort(function(a,b){ return (b[1].ts||0)-(a[1].ts||0); }).map(function(entry) {
+        var key = entry[0], s = entry[1];
+        var ago = Math.round((now - (s.ts||now)) / 1000);
+        var agoStr = ago < 60 ? ago + 's' : (ago < 3600 ? Math.round(ago/60) + 'min' : Math.round(ago/3600) + 'h');
+        var role   = s.role     || 'usuario';
+        var user   = s.username || s.nombre || s.email || '(anónimo)';
+        var rColor = role === 'programador' ? '#c084fc' : role === 'admin' ? '#fbbf24' : '#4ade80';
+        return '<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:#0f1f0f;border:1px solid #1f2937;border-radius:10px;margin-bottom:8px;">' +
+          '<div style="width:10px;height:10px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.25);flex-shrink:0;animation:pulse 2s infinite"></div>' +
+          '<div style="flex:1;min-width:0">' +
+            '<div style="font-size:13px;font-weight:700;color:#d1fae5">' + _escDev(user) + '</div>' +
+            '<div style="font-size:10px;color:#4b5563;margin-top:2px">Conectado hace ' + agoStr + ' · sesión: ' + _escDev(key.slice(0,12)) + '...</div>' +
+          '</div>' +
+          '<span style="font-size:10px;font-weight:800;color:' + rColor + ';text-transform:uppercase;background:rgba(0,0,0,.4);padding:3px 8px;border-radius:6px">' + _escDev(role) + '</span>' +
+        '</div>';
+      }).join(''),
+      '</div>'
+    ].join('');
+  });
+}
 
 function _devReadPath(fbPath) {
   // Try to serve from cached window globals first for speed

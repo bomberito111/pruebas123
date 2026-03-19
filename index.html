@@ -748,7 +748,7 @@ body{font-family:'IBM Plex Sans',system-ui,sans-serif;background:var(--paper,#fa
 <!-- ═══ FIREBASE SDK (ES Module) ═══ -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, push, onValue, remove, update, get, set } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { getDatabase, ref, push, onValue, remove, update, get, set, onDisconnect as fbOnDisconnect } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 
 const firebaseConfig = {
@@ -816,6 +816,21 @@ window._fbOnArchivosCliente = (clienteId, cb) => onValue(ref(db, 'archivos/' + _
 window._fbReadPath   = (path, cb) => onValue(ref(db, path), cb, { onlyOnce: true });
 window._fbSetPath    = (path, val) => set(ref(db, path), val);
 window._fbDeletePath = (path)     => remove(ref(db, path));
+
+// ── Presencia en tiempo real (quién está conectado) ──
+window._myPresenceKey = null;
+window._fbSetPresence = function(userInfo) {
+  var key = 'sess_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+  window._myPresenceKey = key;
+  var presRef = ref(db, 'presencia/' + key);
+  set(presRef, Object.assign({}, userInfo, { ts: Date.now(), online: true }));
+  fbOnDisconnect(presRef).remove(); // auto-delete on disconnect
+};
+window._fbClearPresence = function() {
+  if (window._myPresenceKey) remove(ref(db, 'presencia/' + window._myPresenceKey));
+};
+window._fbOnPresence = function(cb) { return onValue(ref(db, 'presencia'), cb); };
+window._FIREBASE_PROJECT_ID = firebaseConfig.projectId || '';
 
 // ── Image compression — canvas resize to ≤1200px, JPEG 0.72 ──
 window._compressImage = function(file, maxPx, quality) {
@@ -966,12 +981,14 @@ window.CLOUDINARY_UPLOAD_PRESET = ''; // e.g. 'bosques_preset'
     <button onclick="closeDevConsole()" style="padding:5px 12px;background:#1f2937;color:#9ca3af;border:none;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer">✕ Cerrar</button>
   </div>
   <!-- Tab bar -->
-  <div style="background:#111;border-bottom:1px solid #1f2937;padding:0 16px;display:flex;gap:0;flex-shrink:0" id="devTabBar">
-    <button onclick="devSetTab('eval')"     class="dev-tab active" data-tab="eval">📋 /evaluaciones</button>
-    <button onclick="devSetTab('clientes')" class="dev-tab" data-tab="clientes">🏢 /clientes</button>
-    <button onclick="devSetTab('archivos')" class="dev-tab" data-tab="archivos">📁 /archivos</button>
-    <button onclick="devSetTab('usuarios')" class="dev-tab" data-tab="usuarios">👥 /usuarios</button>
-    <button onclick="devSetTab('custom')"   class="dev-tab" data-tab="custom">🔍 Personalizado</button>
+  <div style="background:#111;border-bottom:1px solid #1f2937;padding:0 16px;display:flex;gap:0;flex-shrink:0;overflow-x:auto" id="devTabBar">
+    <button onclick="devSetTab('eval')"      class="dev-tab active" data-tab="eval">📋 Evals</button>
+    <button onclick="devSetTab('clientes')"  class="dev-tab" data-tab="clientes">🏢 Clientes</button>
+    <button onclick="devSetTab('archivos')"  class="dev-tab" data-tab="archivos">📁 Archivos</button>
+    <button onclick="devSetTab('usuarios')"  class="dev-tab" data-tab="usuarios">👥 Usuarios</button>
+    <button onclick="devSetTab('online')"    class="dev-tab" data-tab="online" id="devTabOnline">🟢 En línea (0)</button>
+    <button onclick="devSetTab('servidores')" class="dev-tab" data-tab="servidores">🌐 Servidores</button>
+    <button onclick="devSetTab('custom')"    class="dev-tab" data-tab="custom">🔍 Ruta libre</button>
   </div>
   <!-- Toolbar -->
   <div style="background:#0d0d0d;border-bottom:1px solid #1f2937;padding:6px 16px;display:flex;gap:8px;align-items:center;flex-shrink:0">
