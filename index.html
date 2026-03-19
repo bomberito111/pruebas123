@@ -17,18 +17,21 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <!-- App CSS (chained: components imports layout imports base imports vars) -->
-<link rel="stylesheet" href="css/components.css?v=7">
+<link rel="stylesheet" href="css/components.css?v=8">
 
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;overflow:hidden}
 body{font-family:'IBM Plex Sans',system-ui,sans-serif;background:var(--paper,#faf9f5);color:var(--ink,#1a1a1a);display:flex;flex-direction:column}
+/* Portal cliente tab styles */
+.cp-tab-active{color:#0f3320!important;border-bottom-color:#0f3320!important;}
 /* Mobile default: centered max 480px */
 #app{display:flex;flex-direction:column;height:100%;overflow:hidden;max-width:480px;margin:0 auto;width:100%;position:relative}
 /* Tablet/medium (≥600px): expand to full viewport, bottom nav stays */
 @media(min-width:600px){
   #app{max-width:none;margin:0;width:100%}
-  #db-lv1-list,#db-lv2-list{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(280px,1fr))!important;gap:12px!important;align-items:start!important;flex-direction:unset!important}
+  #db-lv1-list{display:block!important;}
+  #db-lv2-list{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))!important;gap:12px!important;align-items:start!important;}
 }
 /* Desktop (≥1024px): sidebar layout */
 @media(min-width:1024px){
@@ -41,7 +44,8 @@ body{font-family:'IBM Plex Sans',system-ui,sans-serif;background:var(--paper,#fa
   .nav-tab::before{display:none!important}
   .nav-tab.active{background:var(--forest-50,#f0fdf4)!important;border-left:3px solid #166534!important;padding-left:17px!important;color:#0f3320!important}
   .nav-icon{font-size:20px!important;flex-shrink:0!important}
-  #db-lv1-list,#db-lv2-list{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))!important;gap:16px!important;align-items:start!important;flex-direction:unset!important}
+  #db-lv1-list{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(340px,1fr))!important;gap:14px!important;align-items:start!important;}
+  #db-lv2-list{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))!important;gap:16px!important;align-items:start!important;}
   .modal-sheet{max-width:640px!important;margin:auto!important;border-radius:16px!important;max-height:85vh!important}
   .form-scroll{max-width:700px!important;margin:0 auto!important;padding:0 24px!important}
   .db-header{padding:16px 32px!important}
@@ -326,7 +330,7 @@ body{font-family:'IBM Plex Sans',system-ui,sans-serif;background:var(--paper,#fa
           </div>
           <input type="search" class="db-search" placeholder="🔍 Buscar cliente..." oninput="dbRenderLv1()" id="lv1-search">
         </div>
-        <div class="db-scroll" id="db-lv1-list" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:12px 14px 90px;display:flex;flex-direction:column;gap:12px;min-height:0;-webkit-overflow-scrolling:touch;scroll-behavior:smooth;align-content:flex-start">
+        <div class="db-scroll" id="db-lv1-list" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:12px 14px 90px;min-height:0;-webkit-overflow-scrolling:touch;scroll-behavior:smooth;display:block;">
           <div class="db-empty">🌱 Sin evaluaciones guardadas aún.</div>
         </div>
       </div>
@@ -407,6 +411,83 @@ body{font-family:'IBM Plex Sans',system-ui,sans-serif;background:var(--paper,#fa
   </nav>
 
 </div><!-- end #app -->
+
+<!-- ═══ PORTAL DEL CLIENTE (pantalla completa — rol "cliente") ═══ -->
+<div id="clientePortalScreen" style="display:none;position:fixed;inset:0;z-index:800;background:#f8f7f4;flex-direction:column;font-family:'IBM Plex Sans',system-ui,sans-serif;">
+
+  <!-- Header -->
+  <div style="background:#0f3320;color:#fff;padding:14px 18px 10px;flex-shrink:0;display:flex;align-items:center;gap:12px;">
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:11px;font-weight:600;color:#86efac;text-transform:uppercase;letter-spacing:.08em;">Bosques Urbanos</div>
+      <div id="cp-client-name" style="font-size:17px;font-weight:800;font-family:'Fraunces',Georgia,serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Mi Portal</div>
+    </div>
+    <div style="text-align:right;flex-shrink:0;">
+      <div id="cp-user-name" style="font-size:11px;color:#86efac;margin-bottom:2px;"></div>
+      <button onclick="window._cpLogout()" style="font-size:10px;font-weight:700;color:#6ee7b7;background:transparent;border:1px solid #166534;padding:3px 10px;border-radius:20px;cursor:pointer;">Cerrar sesión</button>
+    </div>
+  </div>
+
+  <!-- Stats bar -->
+  <div style="background:#fff;border-bottom:1px solid #e5e7eb;padding:10px 18px;display:flex;gap:0;flex-shrink:0;">
+    <div style="flex:1;text-align:center;border-right:1px solid #f1f1f1;">
+      <div id="cp-stat-total" style="font-size:20px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:#0f3320;">—</div>
+      <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#9ca3af;letter-spacing:.06em;">Árboles</div>
+    </div>
+    <div style="flex:1;text-align:center;border-right:1px solid #f1f1f1;">
+      <div id="cp-stat-alto" style="font-size:20px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:#ea580c;">—</div>
+      <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#9ca3af;letter-spacing:.06em;">Riesgo alto</div>
+    </div>
+    <div style="flex:1;text-align:center;">
+      <div id="cp-stat-extremo" style="font-size:20px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:#b91c1c;">—</div>
+      <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#9ca3af;letter-spacing:.06em;">Extremo</div>
+    </div>
+  </div>
+
+  <!-- Tab bar -->
+  <div style="background:#fff;border-bottom:1px solid #e5e7eb;display:flex;flex-shrink:0;">
+    <button id="cp-tab-trees" class="cp-tab-active" onclick="window._cpSetTab('trees')"
+      style="flex:1;padding:11px 0;font-size:12px;font-weight:700;background:none;border:none;cursor:pointer;border-bottom:2.5px solid transparent;transition:color .15s,border-color .15s;">
+      🌳 Mis Árboles
+    </button>
+    <button id="cp-tab-chat" onclick="window._cpSetTab('chat')"
+      style="flex:1;padding:11px 0;font-size:12px;font-weight:700;background:none;border:none;cursor:pointer;border-bottom:2.5px solid transparent;transition:color .15s,border-color .15s;position:relative;">
+      💬 Consultas
+      <span id="cp-chat-badge" style="display:none;position:absolute;top:6px;right:calc(50% - 30px);background:#b91c1c;color:#fff;font-size:9px;font-weight:800;padding:1px 5px;border-radius:20px;min-width:14px;align-items:center;justify-content:center;"></span>
+    </button>
+  </div>
+
+  <!-- Main content (scrollable) -->
+  <div id="cp-main" style="flex:1;overflow-y:auto;min-height:0;-webkit-overflow-scrolling:touch;"></div>
+
+</div>
+
+<!-- ═══ PORTAL: Tree Detail Modal ═══ -->
+<div id="cpTreeModal" style="display:none;position:fixed;inset:0;z-index:850;background:rgba(0,0,0,.45);flex-direction:column;justify-content:flex-end;align-items:stretch;">
+  <div style="background:#fff;border-radius:20px 20px 0 0;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;">
+    <div style="padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e5e7eb;flex-shrink:0;">
+      <div style="font-size:15px;font-weight:800;font-family:'Fraunces',Georgia,serif;">Detalle del Árbol</div>
+      <button onclick="window._cpCloseTree()" style="font-size:20px;background:none;border:none;cursor:pointer;color:#6b7280;padding:2px 6px;">✕</button>
+    </div>
+    <div id="cpTreeModalBody" style="overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch;"></div>
+  </div>
+</div>
+
+<!-- ═══ PORTAL: Full-screen Photo ═══ -->
+<div id="cpPhotoOverlay" style="display:none;position:fixed;inset:0;z-index:900;background:rgba(0,0,0,.92);align-items:center;justify-content:center;" onclick="window._cpClosePhoto()">
+  <img id="cpPhotoOverlayImg" src="" alt="Foto" style="max-width:95vw;max-height:90vh;object-fit:contain;border-radius:8px;">
+  <button onclick="window._cpClosePhoto()" style="position:absolute;top:16px;right:16px;background:rgba(255,255,255,.15);border:none;color:#fff;font-size:22px;border-radius:50%;width:40px;height:40px;cursor:pointer;">✕</button>
+</div>
+
+<!-- ═══ ADMIN: Portal Config Modal ═══ -->
+<div id="portalConfigModal" style="display:none;position:fixed;inset:0;z-index:2500;background:rgba(0,0,0,.5);flex-direction:column;justify-content:flex-end;align-items:stretch;">
+  <div style="background:#fff;border-radius:20px 20px 0 0;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;">
+    <div style="padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e5e7eb;flex-shrink:0;background:#fff;">
+      <div id="pcm-title" style="font-size:14px;font-weight:800;">⚙️ Configurar Portal</div>
+      <button onclick="window.closePortalConfig()" style="font-size:20px;background:none;border:none;cursor:pointer;color:#6b7280;">✕</button>
+    </div>
+    <div id="pcm-body" style="overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch;"></div>
+  </div>
+</div>
 
 <!-- ═══ MODALS (outside #app so they overlay fully) ═══ -->
 
@@ -881,6 +962,18 @@ window._fbClearPresence = function() {
 window._fbOnPresence = function(cb) { return onValue(ref(db, 'presencia'), cb); };
 window._FIREBASE_PROJECT_ID = firebaseConfig.projectId || '';
 
+// ── Portal del Cliente ──
+window._fbOnPortalTrees   = (clientKey, cb) => onValue(ref(db, 'clientePortal/' + clientKey + '/trees'), cb);
+window._fbSetPortalTree   = (clientKey, arbolKey, data) => set(ref(db, 'clientePortal/' + clientKey + '/trees/' + arbolKey), data);
+window._fbGetPortalConfig = (clientKey, cb) => onValue(ref(db, 'clientePortal/' + clientKey + '/config'), cb, { onlyOnce: true });
+window._fbSetPortalConfig = (clientKey, cfg) => set(ref(db, 'clientePortal/' + clientKey + '/config'), cfg);
+
+// ── Chat cliente–admin ──
+window._fbOnChat        = (clientKey, cb) => onValue(ref(db, 'chat/' + clientKey + '/messages'), cb);
+window._fbSendMessage   = (clientKey, msg) => push(ref(db, 'chat/' + clientKey + '/messages'), msg);
+window._fbMarkChatRead  = (clientKey, msgId) => update(ref(db, 'chat/' + clientKey + '/messages/' + msgId), { read: true });
+window._fbOnAllChats    = (cb) => onValue(ref(db, 'chat'), cb);
+
 // ── Image compression — canvas resize to ≤1200px, JPEG 0.72 ──
 window._compressImage = function(file, maxPx, quality) {
   maxPx = maxPx || 1200; quality = quality || 0.72;
@@ -1016,6 +1109,7 @@ window.CLOUDINARY_UPLOAD_PRESET = 'bosques_urbanos';
 <script src="js/map-home.js"></script>
 <script src="js/map-global.js"></script>
 <script src="js/admin.js"></script>
+<script src="js/client-portal.js"></script>
 <script src="js/app.js"></script>
 
 <!-- ═══ DEV CONSOLE MODAL (programador only) ═══ -->

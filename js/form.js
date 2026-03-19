@@ -944,11 +944,44 @@ window.submitRiskTargetGroup_v7 = function(qid, idx) {
 
 // ── GPS ──
 
+function _geoByIP(idx) {
+  var statusEl = document.getElementById('gpsStatus_' + idx);
+  if (statusEl) statusEl.textContent = '⏳ Obteniendo ubicación aproximada por IP...';
+  fetch('https://ipapi.co/json/')
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (!d || !d.latitude) throw new Error('sin datos');
+      _gpsCoords = { lat: d.latitude, lng: d.longitude, acc: 5000, source: 'ip', city: d.city || '', country: d.country_name || '' };
+      var loc = [d.city, d.country_name].filter(Boolean).join(', ');
+      if (statusEl) statusEl.textContent = '📍 Aprox. ' + _gpsCoords.lat.toFixed(4) + ', ' + _gpsCoords.lng.toFixed(4) + (loc ? ' — ' + loc : '');
+      window.showNotif('⚠️ Ubicación exacta no disponible — ubicación aproximada: ' + (loc || 'obtenida'), 'warning');
+    })
+    .catch(function() {
+      fetch('https://freeipapi.com/api/json')
+        .then(function(r){ return r.json(); })
+        .then(function(d) {
+          if (!d || !d.latitude) throw new Error('sin datos');
+          _gpsCoords = { lat: d.latitude, lng: d.longitude, acc: 8000, source: 'ip', city: d.cityName || '' };
+          var loc2 = d.cityName || '';
+          if (statusEl) statusEl.textContent = '📍 Aprox. ' + _gpsCoords.lat.toFixed(4) + ', ' + _gpsCoords.lng.toFixed(4) + (loc2 ? ' — ' + loc2 : '');
+          window.showNotif('⚠️ Ubicación aproximada obtenida — no se encontró tu GPS exacto', 'warning');
+        })
+        .catch(function() {
+          if (statusEl) statusEl.textContent = '❌ No se pudo obtener ubicación. Usa el mapa 📍 para marcarla manualmente.';
+          window.showNotif('No se pudo obtener ubicación. Usa el selector de mapa.', 'warning');
+        });
+    });
+}
+
 function captureGPS(idx) {
   _activeGpsIdx = idx;
-  if (!navigator.geolocation) { window.showNotif('Geolocalización no disponible'); return; }
-  const statusEl = document.getElementById('gpsStatus_' + idx);
-  if (statusEl) statusEl.textContent = '⏳ Obteniendo ubicación...';
+  var statusEl = document.getElementById('gpsStatus_' + idx);
+  if (!navigator.geolocation) {
+    if (statusEl) statusEl.textContent = '⚠️ GPS no disponible — intentando por IP...';
+    _geoByIP(idx);
+    return;
+  }
+  if (statusEl) statusEl.textContent = '⏳ Obteniendo ubicación GPS...';
   navigator.geolocation.getCurrentPosition(
     function(pos) {
       _gpsCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy };
@@ -956,10 +989,12 @@ function captureGPS(idx) {
       window.showNotif('📍 GPS capturado');
     },
     function(err) {
-      if (statusEl) statusEl.textContent = '❌ Error GPS: ' + err.message;
-      window.showNotif('Error GPS: ' + err.message);
+      // GPS failed — fall back to IP geolocation
+      if (statusEl) statusEl.textContent = '⚠️ GPS no disponible (' + (err.code === 1 ? 'Permiso denegado' : err.message) + ') — buscando ubicación aproximada...';
+      window.showNotif('GPS no disponible — obteniendo ubicación aproximada por IP...', 'info');
+      _geoByIP(idx);
     },
-    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
   );
 }
 

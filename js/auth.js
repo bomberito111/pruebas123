@@ -108,6 +108,10 @@ window._bootAuth = async function () {
     if (typeof window._fbSetPresence === 'function') {
       window._fbSetPresence({ nombre: userData.nombre || userData.email, role: userData.role || 'usuario', uid: session.uid });
     }
+    // Route cliente to portal
+    if ((userData.role || '') === 'cliente') {
+      setTimeout(function() { if (window.initClientPortal) window.initClientPortal(); }, 400);
+    }
   } catch (e) {
     // DB unreachable — allow offline with cached session
     window._AUTH.currentUser = { uid: session.uid };
@@ -116,6 +120,9 @@ window._bootAuth = async function () {
     window._updateAuthUI();
     window._startDataListeners();
     window.hideLoginScreen();
+    if ((session.role || '') === 'cliente') {
+      setTimeout(function() { if (window.initClientPortal) window.initClientPortal(); }, 400);
+    }
   }
 };
 
@@ -125,7 +132,8 @@ function _applyUserToApp(uid, userData) {
   window.APP.userRole       = userData.role || 'usuario';
   window.APP.allowedClients = (userData.clientesPermitidos && userData.clientesPermitidos.length > 0)
     ? userData.clientesPermitidos : null;
-  window.APP.activeEngineer = userData.nombre || userData.email;
+  window.APP.activeEngineer  = userData.nombre || userData.email;
+  window.APP.clienteAsignado = userData.clienteAsignado || null;
 }
 
 /* ─────────────────────────────────────────
@@ -210,6 +218,10 @@ window.handleLogin = async function () {
     // Track presence
     if (typeof window._fbSetPresence === 'function') {
       window._fbSetPresence({ nombre: match.nombre || match.email, role: match.role || 'usuario', uid: matchUid });
+    }
+    // Route cliente to portal
+    if ((match.role || '') === 'cliente') {
+      setTimeout(function() { if (window.initClientPortal) window.initClientPortal(); }, 400);
     }
 
   } catch (e) {

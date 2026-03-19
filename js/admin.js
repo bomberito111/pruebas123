@@ -159,12 +159,18 @@ function renderUsersTab(users, myRole, clienteList) {
   html += '<input type="text" id="newUserNombre" placeholder="Nombre completo *" style="' + inputStyle() + '">';
   html += '<input type="email" id="newUserEmail" placeholder="correo@empresa.com *" style="' + inputStyle() + '">';
   html += '<input type="password" id="newUserPass" placeholder="Contraseña (mín. 6 caracteres) *" style="' + inputStyle() + '">';
-  if (myRole === 'programador') {
-    html += '<select id="newUserRole" style="' + inputStyle() + '">';
-    html += '<option value="usuario">👤 Usuario</option>';
+  if (myRole === 'programador' || myRole === 'admin') {
+    html += '<select id="newUserRole" onchange="window._toggleClienteField()" style="' + inputStyle() + '">';
+    html += '<option value="usuario">👤 Usuario (evaluador)</option>';
     html += '<option value="admin">👑 Administrador</option>';
-    html += '<option value="programador">🔑 Programador</option>';
+    if (myRole === 'programador') html += '<option value="programador">🔑 Programador</option>';
+    html += '<option value="cliente">🏢 Cliente (portal solo lectura)</option>';
     html += '</select>';
+    // Extra field: assigned client name (shown only when role=cliente)
+    html += '<div id="newUserClienteWrap" style="display:none;margin-top:-4px;">';
+    html += '<input type="text" id="newUserClienteAsignado" placeholder="Nombre exacto del cliente en el sistema *" style="' + inputStyle() + '" list="cs-datalist">';
+    html += '<div style="font-size:10px;color:#6b7280;margin-top:-8px;margin-bottom:6px;">⚠️ Debe coincidir exactamente con el cliente en Registros.</div>';
+    html += '</div>';
   } else {
     html += '<input type="hidden" id="newUserRole" value="usuario">';
   }
@@ -491,6 +497,12 @@ function _settingStat(icon, value, label) {
    CREATE USER
 ───────────────────────────────────────── */
 
+window._toggleClienteField = function() {
+  var role = document.getElementById('newUserRole');
+  var wrap = document.getElementById('newUserClienteWrap');
+  if (role && wrap) wrap.style.display = role.value === 'cliente' ? 'block' : 'none';
+};
+
 window.showCreateUserForm = function () {
   var form = document.getElementById('createUserForm');
   if (form) {
@@ -506,6 +518,7 @@ window.createNewUser = async function () {
   var email = (document.getElementById('newUserEmail')?.value || '').trim();
   var pass = document.getElementById('newUserPass')?.value || '';
   var role = document.getElementById('newUserRole')?.value || 'usuario';
+  var clienteAsignado = role === 'cliente' ? (document.getElementById('newUserClienteAsignado')?.value || '').trim() : null;
   var btn = document.getElementById('createUserBtn');
   var err = document.getElementById('createUserError');
 
@@ -521,6 +534,11 @@ window.createNewUser = async function () {
     err.style.display = 'block';
     return;
   }
+  if (role === 'cliente' && !clienteAsignado) {
+    err.textContent = 'Debes indicar el nombre del cliente asignado.';
+    err.style.display = 'block';
+    return;
+  }
 
   btn.disabled = true;
   btn.textContent = 'Creando...';
@@ -529,13 +547,15 @@ window.createNewUser = async function () {
     var salt = window._generateSalt();
     var hash = await window._hashPassword(pass, salt);
     var uid  = 'u_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-    await window._fbSaveUser(uid, {
+    var userData = {
       nombre: nombre, email: email.toLowerCase(), role: role,
       salt: salt, passwordHash: hash,
       activo: true, clientesPermitidos: [],
       creadoPor: window._AUTH.currentUser?.uid || null,
       creadoEn: Date.now()
-    });
+    };
+    if (clienteAsignado) userData.clienteAsignado = clienteAsignado;
+    await window._fbSaveUser(uid, userData);
     if (window.showNotif) window.showNotif('✅ Cuenta creada: ' + nombre);
     // Reset form
     ['newUserNombre', 'newUserEmail', 'newUserPass'].forEach(function (id) {
@@ -1393,133 +1413,221 @@ function _devRenderOverview() {
 }
 
 // ── 👁 EN LÍNEA tab ──────────────────────────────────────────
-var _devOnlineUnsub = null;
-var _devOnlineMap   = null;
+var _devOnlineUnsub  = null;
+var _devOnlineMap    = null;
+var _devOnlineMarkers = {};   // sessionKey → L.Marker
+
+// Pan + open popup on the embedded map for a session
+window._devFlyTo = function(lat, lng, key) {
+  if (!_devOnlineMap) return;
+  _devOnlineMap.flyTo([lat, lng], 14, { duration: 1.2 });
+  var m = _devOnlineMarkers[key];
+  if (m) setTimeout(function(){ try { m.openPopup(); } catch(e){} }, 1300);
+};
+
+function _devMakeMarkerIcon(role, isGPS) {
+  var rColor = role === 'programador' ? '#c084fc' : role === 'admin' ? '#fbbf24' : '#4ade80';
+  var pulse  = isGPS ? 'animation:devPulse 2s infinite' : '';
+  return L.divIcon({
+    html: '<div style="position:relative;width:18px;height:18px;">' +
+            '<div style="position:absolute;inset:0;border-radius:50%;background:' + rColor + '33;' + pulse + ';border-radius:50%;"></div>' +
+            '<div style="position:absolute;inset:3px;border-radius:50%;background:' + rColor + ';border:2px solid #fff;box-shadow:0 0 6px ' + rColor + '88;"></div>' +
+          '</div>',
+    className: '', iconSize:[18,18], iconAnchor:[9,9], popupAnchor:[0,-12]
+  });
+}
 
 function _devRenderOnline() {
   var treeEl   = document.getElementById('devTree');
   var statusEl = document.getElementById('devStatus');
-  if (statusEl) statusEl.textContent = '👁 Monitoreando sesiones...';
+  if (statusEl) statusEl.textContent = '👁 Monitoreando sesiones en tiempo real...';
 
   if (_devOnlineUnsub && typeof _devOnlineUnsub === 'function') { _devOnlineUnsub(); _devOnlineUnsub = null; }
   if (_devOnlineMap) { try { _devOnlineMap.remove(); } catch(e){} _devOnlineMap = null; }
+  _devOnlineMarkers = {};
 
   if (!treeEl) return;
 
-  // Layout: map (top, fixed height) + list (scrollable below)
-  treeEl.style.overflow = 'hidden';
-  treeEl.style.display  = 'flex';
-  treeEl.style.flexDirection = 'column';
-  treeEl.style.padding  = '0';
+  // Inject pulse keyframe once
+  if (!document.getElementById('devPulseStyle')) {
+    var st = document.createElement('style');
+    st.id = 'devPulseStyle';
+    st.textContent = '@keyframes devPulse{0%,100%{transform:scale(1);opacity:.6}50%{transform:scale(2.2);opacity:0}}';
+    document.head.appendChild(st);
+  }
 
+  // Layout: MAP fills 55% / list scrolls below
+  treeEl.style.cssText = 'overflow:hidden;display:flex;flex-direction:column;padding:0;height:100%;';
   treeEl.innerHTML =
-    '<div id="devOnlineMap" style="height:260px;flex-shrink:0;background:#111;border-bottom:1px solid #1f2937;"></div>' +
-    '<div id="devOnlineList" style="flex:1;overflow-y:auto;padding:12px 16px;"></div>';
+    '<div id="devOnlineMapWrap" style="flex:0 0 55%;min-height:220px;position:relative;background:#0a150a;">' +
+      '<div id="devOnlineMap" style="height:100%;width:100%;"></div>' +
+      '<div id="devOnlineMapBadge" style="position:absolute;top:10px;left:10px;z-index:1000;background:rgba(0,0,0,.7);color:#4ade80;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;font-family:\'IBM Plex Mono\',monospace;pointer-events:none;">⏳ cargando...</div>' +
+    '</div>' +
+    '<div id="devOnlineList" style="flex:1;overflow-y:auto;padding:10px 14px 20px;min-height:0;"></div>';
 
-  // Initialize Leaflet map
+  // Init Leaflet map
   setTimeout(function() {
     var mapEl = document.getElementById('devOnlineMap');
     if (!mapEl || typeof L === 'undefined') return;
     try {
-      var map = L.map('devOnlineMap', { zoomControl:true, attributionControl:false }).setView([20, 0], 2);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:18 }).addTo(map);
+      var map = L.map('devOnlineMap', {
+        zoomControl: true,
+        attributionControl: false,
+        preferCanvas: true
+      }).setView([-33.45, -70.65], 5); // Default: Chile
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        subdomains: ['a','b','c']
+      }).addTo(map);
       _devOnlineMap = map;
-    } catch(e) { console.warn('Map init error:', e); }
-  }, 80);
+    } catch(e) { console.warn('Map init:', e); }
+  }, 90);
 
   if (typeof window._fbOnPresence !== 'function') {
-    document.getElementById('devOnlineList').innerHTML = '<span style="color:#f87171">Firebase presencia no disponible</span>';
+    var listEl2 = document.getElementById('devOnlineList');
+    if (listEl2) listEl2.innerHTML = '<div style="padding:20px;color:#f87171;font-size:12px;">⚠️ Firebase presencia no disponible</div>';
     return;
   }
 
   _devOnlineUnsub = window._fbOnPresence(function(snap) {
     var data = snap && snap.val ? snap.val() : null;
     var sessions = data ? Object.entries(data) : [];
+    var count = sessions.length;
+
+    // Update tab label + badge
     var tabBtn = document.getElementById('devTabOnline');
-    if (tabBtn) tabBtn.textContent = '🟢 En línea (' + sessions.length + ')';
-    if (statusEl) statusEl.textContent = '🟢 ' + sessions.length + ' sesión' + (sessions.length !== 1 ? 'es' : '') + ' activa' + (sessions.length !== 1 ? 's' : '');
+    if (tabBtn) tabBtn.textContent = '🟢 En línea (' + count + ')';
+    if (statusEl) statusEl.textContent = '🟢 ' + count + ' sesión' + (count !== 1 ? 'es' : '') + ' activa' + (count !== 1 ? 's' : '');
+    var badge = document.getElementById('devOnlineMapBadge');
+    if (badge) badge.textContent = count > 0 ? '🟢 ' + count + ' activ' + (count === 1 ? 'o' : 'os') : '⚪ Sin sesiones';
 
     var listEl = document.getElementById('devOnlineList');
     if (!listEl) return;
 
-    // Update map markers
-    if (_devOnlineMap) {
-      _devOnlineMap.eachLayer(function(layer) {
-        if (layer instanceof L.Marker) _devOnlineMap.removeLayer(layer);
-      });
+    // ── UPDATE MAP MARKERS ─────────────────────────
+    if (_devOnlineMap && typeof L !== 'undefined') {
+      var currentKeys = sessions.map(function(e){ return e[0]; });
       var bounds = [];
-      sessions.forEach(function(entry) {
-        var s = entry[1];
-        if (s.gps && s.gps.lat && s.gps.lng) {
-          var lat = Number(s.gps.lat), lng = Number(s.gps.lng);
-          var role   = s.role || 'usuario';
-          var user   = s.username || s.nombre || s.email || 'Anónimo';
-          var src    = s.gps.source === 'gps' ? '📍 GPS preciso' : '📡 Aprox. por IP';
-          var rColor = role === 'programador' ? '#c084fc' : role === 'admin' ? '#fbbf24' : '#4ade80';
-          var icon = L.divIcon({
-            html: '<div style="width:14px;height:14px;border-radius:50%;background:' + rColor + ';border:2px solid #fff;box-shadow:0 0 0 3px ' + rColor + '55;"></div>',
-            className: '', iconSize:[14,14], iconAnchor:[7,7]
-          });
-          var marker = L.marker([lat, lng], { icon:icon })
-            .bindPopup('<b style="font-family:sans-serif">' + user + '</b><br><small style="font-family:sans-serif">' + role + ' · ' + src + (s.gps.city ? '<br>' + s.gps.city + ', ' + s.gps.country : '') + '</small>');
-          marker.addTo(_devOnlineMap);
-          bounds.push([lat, lng]);
+
+      // Remove markers for gone sessions
+      Object.keys(_devOnlineMarkers).forEach(function(k) {
+        if (currentKeys.indexOf(k) === -1) {
+          try { _devOnlineMap.removeLayer(_devOnlineMarkers[k]); } catch(e){}
+          delete _devOnlineMarkers[k];
         }
       });
-      if (bounds.length > 0) {
-        try { _devOnlineMap.fitBounds(bounds, { padding:[30,30], maxZoom:10 }); } catch(e){}
+
+      // Add or update markers
+      sessions.forEach(function(entry) {
+        var key = entry[0], s = entry[1];
+        if (!s.gps || !s.gps.lat || !s.gps.lng) return;
+        var lat = Number(s.gps.lat), lng = Number(s.gps.lng);
+        if (isNaN(lat) || isNaN(lng)) return;
+        var role  = s.role || 'usuario';
+        var user  = s.username || s.nombre || s.email || 'Anónimo';
+        var isGPS = s.gps.source !== 'ip';
+        var city  = s.gps.city ? s.gps.city + (s.gps.country ? ', ' + s.gps.country : '') : '';
+        var acc   = s.gps.acc  ? '±' + Math.round(s.gps.acc) + 'm' : '';
+        var src   = isGPS ? '📍 GPS exacto' : '📡 Aprox. por IP';
+        var ago   = s.ts ? Math.round((Date.now() - s.ts) / 60000) + ' min atrás' : '';
+        var rColor = role === 'programador' ? '#c084fc' : role === 'admin' ? '#fbbf24' : '#4ade80';
+
+        var popupHtml =
+          '<div style="font-family:\'IBM Plex Sans\',sans-serif;min-width:160px;">' +
+            '<div style="font-size:13px;font-weight:800;margin-bottom:4px;">' + _escDev(user) + '</div>' +
+            '<div style="font-size:10px;font-weight:700;color:' + rColor + ';text-transform:uppercase;margin-bottom:6px;">' + _escDev(role) + '</div>' +
+            '<div style="font-size:10px;color:#374151;margin-bottom:2px;">' + src + (acc ? ' ' + acc : '') + '</div>' +
+            (city ? '<div style="font-size:10px;color:#374151;margin-bottom:2px;">📌 ' + _escDev(city) + '</div>' : '') +
+            '<div style="font-size:10px;color:#6b7280;font-family:\'IBM Plex Mono\',monospace;">' + lat.toFixed(5) + ', ' + lng.toFixed(5) + '</div>' +
+            (ago ? '<div style="font-size:9px;color:#9ca3af;margin-top:3px;">Hace ' + ago + '</div>' : '') +
+          '</div>';
+
+        if (_devOnlineMarkers[key]) {
+          // Update existing marker position + popup
+          try {
+            _devOnlineMarkers[key].setLatLng([lat, lng]);
+            _devOnlineMarkers[key].setIcon(_devMakeMarkerIcon(role, isGPS));
+            _devOnlineMarkers[key].bindPopup(popupHtml);
+          } catch(e) {}
+        } else {
+          // Create new marker
+          try {
+            var marker = L.marker([lat, lng], { icon: _devMakeMarkerIcon(role, isGPS) })
+              .bindPopup(popupHtml)
+              .addTo(_devOnlineMap);
+            _devOnlineMarkers[key] = marker;
+          } catch(e) {}
+        }
+        bounds.push([lat, lng]);
+      });
+
+      // Fit map to all markers (only on first load when no markers existed)
+      if (bounds.length > 0 && Object.keys(_devOnlineMarkers).length === bounds.length) {
+        try {
+          if (bounds.length === 1) {
+            _devOnlineMap.setView(bounds[0], 12);
+          } else {
+            _devOnlineMap.fitBounds(bounds, { padding:[40,40], maxZoom:12 });
+          }
+        } catch(e){}
       }
     }
 
-    if (sessions.length === 0) {
-      listEl.innerHTML = '<div style="padding:30px;text-align:center;color:#4b5563;">Sin usuarios conectados ahora mismo</div>';
+    // ── RENDER SESSION LIST ────────────────────────
+    if (count === 0) {
+      listEl.innerHTML = '<div style="padding:24px;text-align:center;color:#374151;font-size:12px;">Sin usuarios conectados ahora mismo</div>';
       return;
     }
 
     var now = Date.now();
     listEl.innerHTML = sessions
-      .sort(function(a,b){ return (b[1].ts||0)-(a[1].ts||0); })
+      .sort(function(a,b){ return (b[1].ts||0) - (a[1].ts||0); })
       .map(function(entry) {
         var key = entry[0], s = entry[1];
-        var ago = Math.round((now - (s.ts||now)) / 1000);
-        var agoStr = ago < 60 ? ago + 's' : (ago < 3600 ? Math.round(ago/60) + 'min' : Math.round(ago/3600) + 'h');
+        var ago  = Math.round((now - (s.ts||now)) / 1000);
+        var agoStr = ago < 60 ? ago + 's' : ago < 3600 ? Math.round(ago/60) + 'min' : Math.round(ago/3600) + 'h';
         var role   = s.role || 'usuario';
         var user   = s.username || s.nombre || s.email || '(anónimo)';
         var rColor = role === 'programador' ? '#c084fc' : role === 'admin' ? '#fbbf24' : '#4ade80';
+        var ua     = s.ua || '';
+        var isMobile = /Mobi|Android|iPhone|iPad/i.test(ua);
+        var screenStr = s.screen ? s.screen : '';
 
         var gpsBlock = '';
         if (s.gps && s.gps.lat && s.gps.lng) {
-          var lat = Number(s.gps.lat).toFixed(5), lng = Number(s.gps.lng).toFixed(5);
-          var src = s.gps.source === 'gps' ? '📍 GPS' : '📡 IP aprox.';
-          var city = s.gps.city ? ' · ' + s.gps.city + (s.gps.country ? ', ' + s.gps.country : '') : '';
-          var isp  = s.gps.isp  ? ' · ' + s.gps.isp : '';
+          var lat = Number(s.gps.lat), lng = Number(s.gps.lng);
+          var isGPS  = s.gps.source !== 'ip';
+          var srcLbl = isGPS ? '📍 GPS exacto' : '📡 Aprox. por IP';
+          var city   = s.gps.city ? s.gps.city + (s.gps.country ? ', ' + s.gps.country : '') : '';
+          var acc    = s.gps.acc  ? '±' + Math.round(s.gps.acc) + 'm' : '';
           gpsBlock =
             '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px;">' +
-              '<a href="https://maps.google.com/?q=' + lat + ',' + lng + '" target="_blank" ' +
-                'style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:#0a1a0a;border:1px solid #15803d;border-radius:5px;text-decoration:none;color:#4ade80;font-size:10px;font-family:\'IBM Plex Mono\',monospace;">' +
-                src + ' ' + lat + ', ' + lng + ' →</a>' +
-              '<span style="font-size:9px;color:#4b5563">' + _escDev(city + isp) + '</span>' +
+              '<button onclick="window._devFlyTo(' + lat + ',' + lng + ',\'' + key + '\')" ' +
+                'style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:#071207;border:1px solid #16a34a;border-radius:6px;color:#4ade80;font-size:10px;font-family:\'IBM Plex Mono\',monospace;cursor:pointer;font-weight:700;">' +
+                '🗺️ ' + lat.toFixed(4) + ', ' + lng.toFixed(4) +
+              '</button>' +
+              '<span style="font-size:9px;color:#4ade8066;">' + srcLbl + (acc ? ' ' + acc : '') + '</span>' +
+              (city ? '<span style="font-size:9px;color:#4b5563;">📌 ' + _escDev(city) + '</span>' : '') +
             '</div>';
         } else {
-          gpsBlock = '<span style="font-size:9px;color:#374151;margin-top:5px;display:inline-block;">📍 Sin ubicación</span>';
+          gpsBlock = '<div style="font-size:9px;color:#374151;margin-top:6px;">📍 Sin ubicación disponible</div>';
         }
 
-        var ua = s.ua || '';
-        var isMobile = /Mobi|Android|iPhone|iPad/i.test(ua);
-        var screen = s.screen ? s.screen : '';
-
-        return '<div style="background:#0f1f0f;border:1px solid #1f2937;border-radius:10px;margin-bottom:8px;overflow:hidden;">' +
-          '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px 6px;">' +
-            '<div style="width:9px;height:9px;border-radius:50%;background:#22c55e;flex-shrink:0;box-shadow:0 0 0 3px rgba(34,197,94,.2)"></div>' +
+        return '<div style="background:#0d1f0d;border:1px solid #1a2e1a;border-radius:10px;margin-bottom:8px;overflow:hidden;">' +
+          '<div style="display:flex;align-items:center;gap:8px;padding:9px 12px;">' +
+            '<div style="width:8px;height:8px;border-radius:50%;background:#22c55e;flex-shrink:0;' +
+              'box-shadow:0 0 0 3px rgba(34,197,94,.25);animation:devPulse 2.5s ease-in-out infinite;"></div>' +
             '<div style="flex:1;min-width:0;">' +
-              '<span style="font-size:12px;font-weight:700;color:#d1fae5">' + _escDev(user) + '</span>' +
-              '<span style="font-size:9px;color:#4b5563;margin-left:8px">hace ' + agoStr + '</span>' +
+              '<span style="font-size:12px;font-weight:700;color:#d1fae5;">' + _escDev(user) + '</span>' +
+              '<span style="font-size:9px;color:#4b5563;margin-left:8px;">hace ' + agoStr + '</span>' +
             '</div>' +
-            '<span style="font-size:9px;font-weight:800;color:' + rColor + ';text-transform:uppercase;border:1px solid ' + rColor + '44;padding:2px 7px;border-radius:4px;">' + _escDev(role) + '</span>' +
+            '<span style="font-size:9px;font-weight:800;color:' + rColor + ';border:1px solid ' + rColor + '44;padding:2px 7px;border-radius:4px;text-transform:uppercase;">' + _escDev(role) + '</span>' +
           '</div>' +
-          '<div style="padding:0 12px 10px;border-top:1px solid #1f2937;padding-top:7px;">' +
+          '<div style="padding:4px 12px 10px;border-top:1px solid #1a2e1a;">' +
             gpsBlock +
-            (ua ? '<div style="font-size:9px;color:#1f2937;margin-top:4px;word-break:break-all;">' + (isMobile?'📱':'💻') + ' ' + _escDev(ua.slice(0,70)) + (screen?' · '+screen:'') + '</div>' : '') +
+            (ua ? '<div style="font-size:9px;color:#2d3748;margin-top:5px;word-break:break-all;">' +
+              (isMobile ? '📱 ' : '💻 ') + _escDev(ua.slice(0,80)) + (screenStr ? ' · ' + screenStr : '') +
+            '</div>' : '') +
           '</div>' +
         '</div>';
       }).join('');

@@ -206,27 +206,55 @@ window.homeGoToMyLocation = function () {
     window.showNotif('📍 Ubicado en tu posición');
     return;
   }
-  if (!navigator.geolocation) {
-    window.showNotif('Geolocalización no soportada');
-    return;
-  }
+
   var btn = document.getElementById('homeLocateBtn');
   if (btn) btn.style.opacity = '0.5';
+
+  // ── IP-based approximate location fallback ──
+  function _flyToIPLocation() {
+    fetch('https://ipapi.co/json/')
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d && d.latitude && d.longitude) {
+          if (homeMapInstance) homeMapInstance.flyTo([d.latitude, d.longitude], 12, { animate: true, duration: 1.2 });
+          window.showNotif('⚠️ No se pudo obtener tu ubicación exacta — esta es tu ubicación aproximada');
+        } else { throw new Error('no coords'); }
+      })
+      .catch(function () {
+        // Second fallback: freeipapi.com
+        fetch('https://freeipapi.com/api/json')
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (d && d.latitude && d.longitude) {
+              if (homeMapInstance) homeMapInstance.flyTo([d.latitude, d.longitude], 12, { animate: true, duration: 1.2 });
+              window.showNotif('⚠️ No se pudo obtener tu ubicación exacta — esta es tu ubicación aproximada');
+            } else {
+              window.showNotif('No se pudo determinar tu ubicación');
+            }
+          })
+          .catch(function () { window.showNotif('No se pudo determinar tu ubicación'); });
+      })
+      .finally(function () { if (btn) btn.style.opacity = '1'; });
+  }
+
+  if (!navigator.geolocation) {
+    _flyToIPLocation();
+    return;
+  }
+
   navigator.geolocation.getCurrentPosition(
     function (pos) {
       var lat = pos.coords.latitude;
       var lng = pos.coords.longitude;
-      if (homeMapInstance) {
-        homeMapInstance.flyTo([lat, lng], 18, { animate: true, duration: 1.0 });
-      }
+      if (homeMapInstance) homeMapInstance.flyTo([lat, lng], 18, { animate: true, duration: 1.0 });
       if (btn) btn.style.opacity = '1';
-      window.showNotif('📍 Ubicado en tu posición');
+      window.showNotif('📍 Ubicado en tu posición exacta');
     },
     function () {
-      if (btn) btn.style.opacity = '1';
-      window.showNotif('No se pudo obtener la ubicación');
+      // GPS failed → try IP
+      _flyToIPLocation();
     },
-    { enableHighAccuracy: true, timeout: 10000 }
+    { enableHighAccuracy: true, timeout: 8000 }
   );
 };
 

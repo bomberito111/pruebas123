@@ -183,45 +183,48 @@
         }
       });
 
-      html += '<div class="client-card" onclick="dbOpenClient(\'' + encodedName + '\')">';
-      // Head
+      var wColor = getRiskColor(worst);
+      html += '<div class="client-card" onclick="dbOpenClient(\'' + encodedName + '\')" style="margin-bottom:10px;">';
+
+      // ── Top: avatar + name + risk badge ──
       html += '<div class="cc-head">';
       html += '<div class="cc-avatar">' + letter + '</div>';
       html += '<div class="cc-info">';
       html += '<span class="cc-name">' + c.name + '</span>';
       html += '<div class="cc-meta">';
-      html += '<span>' + fmtDate(lastTs) + '</span>';
-      html += '<span style="background:' + getRiskColor(worst) + ';color:#fff;padding:1px 7px;border-radius:20px;font-size:9px;font-weight:700;text-transform:uppercase;">' + getRiskLabel(worst) + '</span>';
+      html += '<span style="font-size:10px;">📅 ' + fmtDate(lastTs) + '</span>';
+      html += '<span style="background:' + wColor + ';color:#fff;padding:2px 9px;border-radius:20px;font-size:9px;font-weight:800;text-transform:uppercase;">' + getRiskLabel(worst) + '</span>';
       html += '</div></div>';
-      html += '</div>'; // cc-head
+      html += '<span style="font-size:18px;color:#ccc;flex-shrink:0;">›</span>';
+      html += '</div>';
 
-      // Risk bar
-      if (barHtml) {
-        html += '<div class="cc-risk-bar">' + barHtml + '</div>';
-      }
+      // ── Colored risk distribution bar ──
+      if (barHtml) html += '<div class="cc-risk-bar">' + barHtml + '</div>';
 
-      // Stats
+      // ── Stats row ──
       html += '<div class="cc-stats">';
       html += '<div class="cc-stat"><span class="cc-stat-val">' + totalTrees + '</span><span class="cc-stat-lbl">Árboles</span></div>';
-      html += '<div class="cc-stat"><span class="cc-stat-val">' + totalEvals + '</span><span class="cc-stat-lbl">Evals</span></div>';
-      html += '<div class="cc-stat' + (extremoCount > 0 ? ' extremo' : '') + '"><span class="cc-stat-val">' + extremoCount + '</span><span class="cc-stat-lbl">Extremo</span></div>';
+      html += '<div class="cc-stat"><span class="cc-stat-val">' + totalEvals + '</span><span class="cc-stat-lbl">Evaluaciones</span></div>';
+      html += '<div class="cc-stat' + (extremoCount > 0 ? ' extremo' : '') + '"><span class="cc-stat-val">' + (extremoCount || '—') + '</span><span class="cc-stat-lbl">Extremo</span></div>';
       html += '</div>';
 
-      // Risk counts pills
-      html += '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;">';
+      // ── Risk pills (only if more than one risk level) ──
+      var riskPillHtml = '';
       ['extremo','alto','moderado','bajo'].forEach(function (r) {
         if (riskCounts[r] > 0) {
-          html += '<span style="display:inline-flex;align-items:center;gap:3px;background:' + getRiskColor(r) + '1a;color:' + getRiskColor(r) + ';border:1px solid ' + getRiskColor(r) + '33;border-radius:20px;padding:2px 8px;font-size:10px;font-weight:800;">' + riskCounts[r] + ' ' + getRiskLabel(r) + '</span>';
+          riskPillHtml += '<span style="background:' + getRiskColor(r) + '18;color:' + getRiskColor(r) + ';border:1px solid ' + getRiskColor(r) + '44;border-radius:20px;padding:2px 9px;font-size:10px;font-weight:800;">' + riskCounts[r] + ' ' + getRiskLabel(r) + '</span>';
         }
       });
-      html += '</div>';
+      if (riskPillHtml) {
+        html += '<div style="padding:8px 14px;display:flex;gap:6px;flex-wrap:wrap;">' + riskPillHtml + '</div>';
+      }
 
-      // Actions
+      // ── Actions: 2×2 grid ──
       html += '<div class="client-actions">';
-      html += '<button class="ca-btn" onclick="event.stopPropagation();openDocsModal(\'' + encodedName + '\')">📁 Archivos</button>';
       html += '<button class="ca-btn" onclick="event.stopPropagation();dbOpenClient(\'' + encodedName + '\')">🌳 Ver árboles</button>';
-      html += '<button class="ca-btn" style="background:#1d4ed8;color:#fff;border-color:#1d4ed8;" onclick="event.stopPropagation();dbExportClientPDF(\'' + encodedName + '\')">📄 PDF</button>';
-      html += '<button class="ca-btn" style="background:#fee2e2;color:#b91c1c;border-color:#fecaca;" onclick="event.stopPropagation();deleteClientFromRecords(\'' + encodedName + '\')">🗑 Eliminar</button>';
+      html += '<button class="ca-btn" onclick="event.stopPropagation();openDocsModal(\'' + encodedName + '\')">📁 Archivos</button>';
+      html += '<button class="ca-btn" style="color:#1d4ed8;" onclick="event.stopPropagation();dbExportClientPDF(\'' + encodedName + '\')">📄 Exportar PDF</button>';
+      html += '<button class="ca-btn" style="color:#b91c1c;" onclick="event.stopPropagation();if(confirm(\'¿Eliminar cliente ' + c.name.replace(/'/g,"\\'") + '?\'))deleteClientFromRecords(\'' + encodedName + '\')">🗑 Eliminar</button>';
       html += '</div>';
 
       html += '</div>'; // client-card
@@ -821,9 +824,25 @@
       html += '<div class="item"><span class="item-label">Cliente</span><span class="item-val">' + safeVal(ev.cliente) + '</span></div>';
       html += '<div class="item"><span class="item-label">Especie</span><span class="item-val">' + safeVal(ev.especie) + '</span></div>';
       html += '<div class="item"><span class="item-label">Evaluador</span><span class="item-val">' + safeVal(ev.evaluador) + '</span></div>';
-      html += '<div class="item"><span class="item-label">Fecha</span><span class="item-val">' + fmtDate(ev.timestamp) + '</span></div>';
-      if (ev.lat && ev.lng) {
-        html += '<div class="item"><span class="item-label">GPS</span><span class="item-val">' + Number(ev.lat).toFixed(6) + ', ' + Number(ev.lng).toFixed(6) + '</span></div>';
+      html += '<div class="item"><span class="item-label">Fecha</span><span class="item-val">' + fmtDate(ev.timestamp || ev.ts) + '</span></div>';
+      // GPS — handle object {lat,lng}, string "lat,lng", or legacy ev.lat/ev.lng
+      var _pdfGps = ev.gps || ((ev.answers) && ev.answers.gps) || null;
+      var _pdfLat = null, _pdfLng = null;
+      if (_pdfGps && typeof _pdfGps === 'object' && _pdfGps.lat) {
+        _pdfLat = parseFloat(_pdfGps.lat); _pdfLng = parseFloat(_pdfGps.lng);
+      } else if (typeof _pdfGps === 'string' && _pdfGps.indexOf(',') !== -1) {
+        var _pg = _pdfGps.split(','); _pdfLat = parseFloat(_pg[0]); _pdfLng = parseFloat(_pg[1]);
+      } else if (ev.lat && ev.lng) {
+        _pdfLat = parseFloat(ev.lat); _pdfLng = parseFloat(ev.lng);
+      }
+      if (_pdfLat && _pdfLng && !isNaN(_pdfLat) && !isNaN(_pdfLng)) {
+        html += '<div class="item"><span class="item-label">GPS</span><span class="item-val">' + _pdfLat.toFixed(6) + ', ' + _pdfLng.toFixed(6) + '</span></div>';
+      }
+      if (ev.isaLevel) html += '<div class="item"><span class="item-label">Nivel ISA</span><span class="item-val" style="color:' + (riskColorMap[ev.isaLevel]||'#333') + ';font-weight:900;">' + (riskLabelMap[ev.isaLevel]||ev.isaLevel.toUpperCase()) + '</span></div>';
+      if (ev.isaImpacto) html += '<div class="item"><span class="item-label">Prob. combinada</span><span class="item-val">' + pdfSafeVal(ev.isaImpacto) + '</span></div>';
+      if (ev.bioMargin !== null && ev.bioMargin !== undefined) {
+        var _bm = typeof ev.bioMargin === 'number' ? ev.bioMargin.toFixed(1) + '%' : pdfSafeVal(ev.bioMargin);
+        html += '<div class="item"><span class="item-label">Margen Rinntech</span><span class="item-val" style="color:' + (ev.bioCritical ? '#b91c1c' : '#15803d') + ';">' + _bm + (ev.bioCritical ? ' ⚠️ Crítico' : ' ✅ OK') + '</span></div>';
       }
       html += '</div>';
 
@@ -831,16 +850,17 @@
       html += '<div class="section-title">Respuestas del Formulario</div>';
       html += '<div class="grid">';
 
+      var _pdfAns = ev.answers || {};
       qs.forEach(function (q) {
-        if (q.type === 'risk_target_group') {
-          // Handled separately below
-          return;
-        }
-        var val = ev[q.id];
+        if (q.type === 'risk_target_group') return; // handled below
+        if (['arbolId','especie','cliente','evaluador'].indexOf(q.id) !== -1) return; // already shown
+        var val = (ev[q.id] !== undefined && ev[q.id] !== null) ? ev[q.id]
+                : (_pdfAns[q.id] !== undefined && _pdfAns[q.id] !== null) ? _pdfAns[q.id]
+                : undefined;
         if (val === undefined || val === null) return;
 
         if (q.type === 'group' && q.fields) {
-          var grp = ev[q.id] || {};
+          var grp = (typeof val === 'object' && !Array.isArray(val)) ? val : {};
           q.fields.forEach(function (f) {
             var fv = grp[f.id];
             if (fv === undefined || fv === null || fv === '') return;
@@ -853,35 +873,43 @@
       });
       html += '</div>';
 
-      // Diana groups
+      // Diana groups — check both top-level and ev.answers
       var dianaGroups = [
         { key: 'copa_dianas',    label: 'Dianas Copa' },
         { key: 'tronco_dianas',  label: 'Dianas Tronco' },
         { key: 'raices_dianas',  label: 'Dianas Raíces' }
       ];
       dianaGroups.forEach(function (dg) {
-        var arr = ev[dg.key];
+        var arr = ev[dg.key] || _pdfAns[dg.key];
         if (!arr || !arr.length) return;
         html += '<div class="section-title">' + dg.label + '</div>';
         arr.forEach(function (d) {
           var dr = d.riesgo || 'bajo';
           var dc = riskColorMap[dr] || '#15803d';
           html += '<div class="diana-row" style="border-color:' + dc + ';background:' + dc + '18;">';
-          html += '<strong>Diana:</strong> ' + pdfSafeVal(d.diana || d.ocupacion) + ' · ';
-          html += '<strong>Prob. Fallo:</strong> ' + pdfSafeVal(d.prob_fallo) + ' · ';
-          html += '<strong>Impacto:</strong> ' + pdfSafeVal(d.impacto) + ' · ';
+          html += '<strong>Diana:</strong> ' + pdfSafeVal(d.diana || d.ocupacion) + ' &nbsp;·&nbsp; ';
+          html += '<strong>Prob. Fallo:</strong> ' + pdfSafeVal(d.prob_fallo) + ' &nbsp;·&nbsp; ';
+          html += '<strong>Impacto:</strong> ' + pdfSafeVal(d.impacto) + ' &nbsp;·&nbsp; ';
+          if (d.conseq || d.consecuencia) html += '<strong>Consecuencia:</strong> ' + pdfSafeVal(d.conseq || d.consecuencia) + ' &nbsp;·&nbsp; ';
+          if (d.probComb) html += '<strong>Prob. comb.:</strong> ' + pdfSafeVal(d.probComb) + ' &nbsp;·&nbsp; ';
           html += '<strong>Riesgo:</strong> <span style="font-weight:900;color:' + dc + ';">' + (riskLabelMap[dr] || dr.toUpperCase()) + '</span>';
           html += '</div>';
         });
       });
 
-      // Rinntech
-      if (ev.H || ev.Di || ev.Dd) {
+      // Rinntech — check both top-level and ev.answers
+      if (ev.H || ev.Di || ev.Dd || _pdfAns.H || _pdfAns.Di || _pdfAns.Dd) {
         html += '<div class="section-title">Biometría Rinntech</div>';
         html += '<div class="grid">';
         ['H','C','Di','Hd','Dd','tActual','topologia'].forEach(function (k) {
-          if (ev[k]) html += '<div class="item"><span class="item-label">' + k + '</span><span class="item-val">' + pdfSafeVal(ev[k]) + '</span></div>';
+          var _rv = (ev[k] !== undefined && ev[k] !== null && ev[k] !== '') ? ev[k] : (_pdfAns[k] || null);
+          if (_rv) html += '<div class="item"><span class="item-label">' + k + '</span><span class="item-val">' + pdfSafeVal(_rv) + '</span></div>';
         });
+        if (ev.bioMargin !== null && ev.bioMargin !== undefined) {
+          var _bm2 = typeof ev.bioMargin === 'number' ? ev.bioMargin.toFixed(1) + '%' : pdfSafeVal(ev.bioMargin);
+          html += '<div class="item"><span class="item-label">Margen Rinntech</span><span class="item-val" style="color:' + (ev.bioCritical ? '#b91c1c' : '#15803d') + ';">' + _bm2 + '</span></div>';
+        }
+        if (ev.tReq) html += '<div class="item"><span class="item-label">t_req (mm)</span><span class="item-val">' + pdfSafeVal(ev.tReq) + '</span></div>';
         html += '</div>';
       }
 
@@ -909,217 +937,264 @@
     var ev = db[key];
     if (!ev) { showNotif('Evaluación no encontrada', 'error'); return; }
 
-    var risk = getEffRisk(ev);
+    var ans   = ev.answers || {};
+    var risk  = getEffRisk(ev);
     var color = getRiskColor(risk);
     var label = getRiskLabel(risk);
 
+    // Helper: get value from ev or ev.answers
+    function gv(id) {
+      if (ev[id] !== undefined && ev[id] !== null && ev[id] !== '') return ev[id];
+      if (ans[id] !== undefined && ans[id] !== null && ans[id] !== '') return ans[id];
+      return null;
+    }
+    function row(lbl, val) {
+      if (val === null || val === undefined || val === '') return '';
+      var display = Array.isArray(val) ? val.join(', ') : String(val);
+      return '<div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid #f5f0e8;">' +
+        '<span style="flex:0 0 44%;font-size:11px;font-weight:700;color:#7a746e;padding-right:8px;">' + lbl + '</span>' +
+        '<span style="flex:1;font-size:12px;font-weight:600;color:#1a1a1a;word-break:break-word;">' + display + '</span>' +
+      '</div>';
+    }
+    function section(title, content, icon) {
+      if (!content) return '';
+      return '<div style="margin-bottom:16px;border:1.5px solid #e8e4dd;border-radius:12px;overflow:hidden;">' +
+        '<div style="background:#f9f7f3;padding:9px 14px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#5a5550;display:flex;align-items:center;gap:6px;">' +
+          (icon || '') + ' ' + title +
+        '</div>' +
+        '<div style="padding:6px 14px 4px;">' + content + '</div>' +
+      '</div>';
+    }
+
     // Set modal title
     var titleEl = document.getElementById('modalTitle');
-    if (titleEl) titleEl.textContent = (ev.arbolId || key) + ' · ' + safeVal(ev.especie);
+    if (titleEl) titleEl.textContent = (gv('arbolId') || key) + (gv('especie') ? ' · ' + gv('especie') : '');
 
     var html = '';
 
-    // 1. Risk banner
-    html += '<div class="risk-banner rb-' + risk + '">';
-    html += '<span class="rb-level">' + label.toUpperCase() + '</span>';
-    html += '<span class="rb-label">Nivel de Riesgo ISA TRAQ</span>';
+    // ═══ 1. RISK BANNER ═══
+    html += '<div style="background:' + color + ';color:#fff;padding:18px 18px 14px;text-align:center;">';
+    html += '<div style="font-size:26px;font-weight:900;letter-spacing:.04em;text-transform:uppercase;">' + label + '</div>';
+    html += '<div style="font-size:11px;opacity:.85;margin-top:2px;font-weight:600;">Nivel de Riesgo ISA TRAQ</div>';
+    if (ev.riskSource === 'manual') {
+      html += '<div style="margin-top:6px;font-size:10px;background:rgba(255,255,255,.2);padding:3px 10px;border-radius:20px;display:inline-block;">📋 Asignado manualmente</div>';
+    }
     if (ev.riskOverride && ev.riskOverride.active) {
-      html += '<div style="margin-top:6px;font-size:11px;font-weight:700;">Override: ' + safeVal(ev.riskOverride.reason) + '</div>';
+      html += '<div style="margin-top:6px;font-size:10px;background:rgba(255,255,255,.2);padding:3px 10px;border-radius:20px;display:inline-block;">⚡ Override activo</div>';
     }
     html += '</div>';
 
-    // 2. Biometría Rinntech
-    if (ev.H || ev.Di || ev.Dd || ev.tActual) {
-      html += '<div class="detail-section">';
-      html += '<span class="detail-sec-title">Biometría Rinntech</span>';
-      html += '<div class="r-bio">';
-      var rinnFields = [
-        { k:'H', l:'Altura total H' }, { k:'C', l:'Inicio copa C' },
-        { k:'Di', l:'Diám. sección intacta Di' }, { k:'Hd', l:'Altura defecto Hd' },
-        { k:'Dd', l:'Diám. exterior defecto Dd' }, { k:'tActual', l:'Pared residual t_actual' },
-        { k:'topologia', l:'Topología' }
-      ];
-      rinnFields.forEach(function (f) {
-        if (ev[f.k] !== undefined && ev[f.k] !== null && ev[f.k] !== '') {
-          html += '<div class="r-bio-row"><span class="r-bio-key">' + f.l + '</span>';
-          html += '<span class="rv-neu">' + safeVal(ev[f.k]) + '</span></div>';
-        }
+    html += '<div style="padding:14px 14px 20px;">';
+
+    // ═══ 2. IDENTIFICATION ═══
+    var idContent = '';
+    idContent += row('ID Árbol', gv('arbolId'));
+    idContent += row('Especie', gv('especie'));
+    idContent += row('Cliente', gv('cliente'));
+    idContent += row('Evaluador', gv('evaluador'));
+    var ts = ev.timestamp || ev.ts || ans.timestamp || ans.ts;
+    if (ts) idContent += row('Fecha de evaluación', fmtDate(ts));
+    if (ev.evaluationMethod === 'manual' || ev.riskSource === 'manual') {
+      idContent += row('Método', '📋 Riesgo seleccionado manualmente');
+    } else if (ev.isaLevel) {
+      idContent += row('Método', '📊 Formulario ISA TRAQ completo');
+    }
+    html += section('Identificación', idContent, '🆔');
+
+    // ═══ 3. ISA COMPUTED RESULTS ═══
+    var isaContent = '';
+    if (ev.isaLevel)    isaContent += row('Nivel ISA global', '<span style="font-weight:900;color:' + color + ';text-transform:uppercase;">' + label + '</span>');
+    if (ev.isaImpacto)  isaContent += row('Probabilidad combinada', ev.isaImpacto);
+    if (ev.bioMargin !== null && ev.bioMargin !== undefined) {
+      var marginOk = typeof ev.bioMargin === 'number' && ev.bioMargin >= 100;
+      isaContent += row('Margen estructural Rinntech',
+        (typeof ev.bioMargin === 'number' ? ev.bioMargin.toFixed(1) + '%' : ev.bioMargin) +
+        (marginOk ? ' ✅ Adecuado' : ' ⚠️ Crítico'));
+    }
+    if (ev.tReq !== null && ev.tReq !== undefined) isaContent += row('Pared mínima requerida (t_req)', safeVal(ev.tReq) + ' mm');
+    if (isaContent) html += section('Resultados ISA TRAQ', isaContent, '📊');
+
+    // ═══ 4. PHOTOS ═══
+    var photosRaw = ev.photoUrls || ev.photos || ans.photoUrls || ans.photos || [];
+    if (typeof window.FB !== 'undefined' && window.FB.getPhotoUrls) photosRaw = window.FB.getPhotoUrls(ev);
+    var photos = Array.isArray(photosRaw) ? photosRaw.filter(function(u){ return u && typeof u === 'string'; }) : [];
+    if (photos.length > 0) {
+      var photoHtml = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:6px;padding:6px 0 4px;">';
+      photos.forEach(function(url, i) {
+        photoHtml +=
+          '<div style="position:relative;aspect-ratio:1;overflow:hidden;border-radius:8px;background:#eee;" onclick="openPhotoModal(\'' + key + '\',' + i + ')">' +
+            '<img src="' + url + '" style="width:100%;height:100%;object-fit:cover;cursor:pointer;" loading="lazy" ' +
+              'onerror="this.closest(\'div\').style.display=\'none\'">' +
+            '<button onclick="event.stopPropagation();deletePhoto(\'' + key + '\',' + i + ')" ' +
+              'style="position:absolute;top:3px;right:3px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:11px;cursor:pointer;line-height:1;">✕</button>' +
+          '</div>';
       });
-
-      // APO calculation
-      if (ev.tActual && ev.Dd) {
-        var tA = parseFloat(ev.tActual);
-        var Dd = parseFloat(ev.Dd);
-        if (!isNaN(tA) && !isNaN(Dd) && Dd > 0) {
-          var tMin = Dd * 0.15;
-          var pct = (tA / Dd * 100).toFixed(1);
-          var apo_cls = tA >= tMin ? 'rv-ok' : 'rv-bad';
-          html += '<div class="r-bio-row"><span class="r-bio-key">APO (t/D ratio)</span>';
-          html += '<span class="' + apo_cls + '">' + pct + '% · ' + (tA >= tMin ? 'Adecuado' : 'Crítico') + '</span></div>';
-        }
-      }
-      html += '</div></div>';
+      photoHtml += '</div>';
+      photoHtml +=
+        '<div style="display:flex;gap:6px;padding:6px 0 4px;">' +
+          '<button onclick="triggerPhotoInput(\'' + key + '\',\'camera\')" ' +
+            'style="flex:1;padding:8px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;font-size:11px;font-weight:700;color:#15803d;cursor:pointer;">📷 Cámara</button>' +
+          '<button onclick="triggerPhotoInput(\'' + key + '\',\'gallery\')" ' +
+            'style="flex:1;padding:8px;background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:8px;font-size:11px;font-weight:700;color:#1d4ed8;cursor:pointer;">🖼️ Galería</button>' +
+        '</div>';
+      html += section('Fotos (' + photos.length + ')', photoHtml, '📷');
+    } else {
+      var noPhotoHtml =
+        '<div style="display:flex;gap:6px;padding:4px 0;">' +
+          '<button onclick="triggerPhotoInput(\'' + key + '\',\'camera\')" ' +
+            'style="flex:1;padding:9px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;font-size:11px;font-weight:700;color:#15803d;cursor:pointer;">📷 Añadir foto</button>' +
+          '<button onclick="triggerPhotoInput(\'' + key + '\',\'gallery\')" ' +
+            'style="flex:1;padding:9px;background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:8px;font-size:11px;font-weight:700;color:#1d4ed8;cursor:pointer;">🖼️ Galería</button>' +
+        '</div>';
+      html += section('Fotos (0)', noPhotoHtml, '📷');
     }
 
-    // 3. Photos
-    var photosRaw = window.FB ? window.FB.getPhotoUrls(ev) : (ev.photoUrls || ev.photos || []);
-    var photos = photosRaw.filter(function (u) { return u && typeof u === 'string' && u.length > 0; });
-    html += '<div class="detail-section">';
-    html += '<span class="detail-sec-title">Fotos (' + photos.length + ')</span>';
-    html += '<div class="photos-grid">';
-    photos.forEach(function (url, idx) {
-      html += '<div class="photo-thumb" onclick="openPhotoModal(\'' + key + '\',' + idx + ')">';
-      html += '<img src="' + url + '" alt="Foto ' + (idx + 1) + '" loading="lazy" onerror="this.closest(\'.photo-thumb\').style.display=\'none\'">';
-      html += '<button class="photo-del" onclick="event.stopPropagation();deletePhoto(\'' + key + '\',' + idx + ')">✕</button>';
-      html += '</div>';
-    });
-    html += '<div class="photo-add-btn" onclick="triggerPhotoInput(\'' + key + '\',\'camera\')" title="Cámara">';
-    html += '<span style="font-size:22px;">📷</span>';
-    html += '<span class="photo-add-label">Cámara</span>';
-    html += '</div>';
-    html += '<div class="photo-add-btn" onclick="triggerPhotoInput(\'' + key + '\',\'gallery\')" title="Galería" style="background:#eff6ff;">';
-    html += '<span style="font-size:22px;">🖼️</span>';
-    html += '<span class="photo-add-label">Galería</span>';
-    html += '</div>';
-    html += '</div></div>';
-
-    // 4. Notes
-    html += '<div class="detail-section">';
-    html += '<span class="detail-sec-title">Notas del Técnico</span>';
-    html += '<textarea id="detail-notes-' + key + '" style="width:100%;min-height:80px;padding:10px 12px;border:1.5px solid #ddd;border-radius:10px;font-family:inherit;font-size:13px;resize:vertical;outline:none;line-height:1.5;" placeholder="Añade notas, observaciones...">' + safeVal(ev.notes === '—' ? '' : (ev.notes || '')) + '</textarea>';
-    html += '<button onclick="saveTreeNotes(\'' + key + '\')" style="margin-top:6px;padding:9px 20px;background:#0f3320;color:#fff;border:none;border-radius:9px;font-weight:700;font-size:12px;cursor:pointer;width:100%;">💾 Guardar notas</button>';
-    html += '</div>';
-
-    // 5. Identification + All form answers
-    var ans = ev.answers || {}; // old records store data in ev.answers
-    html += '<div class="detail-section">';
-    html += '<span class="detail-sec-title">Datos de la Evaluación</span>';
-    html += '<div class="detail-grid">';
-
-    // Always show identification fields
-    var idFields = [
-      { id: 'arbolId',   label: 'ID Árbol' },
-      { id: 'especie',   label: 'Especie' },
-      { id: 'cliente',   label: 'Cliente' },
-      { id: 'evaluador', label: 'Evaluador' }
-    ];
-    idFields.forEach(function (f) {
-      var v = ev[f.id] || ans[f.id];
-      if (v) html += '<div class="detail-item"><span class="di-label">' + f.label + '</span><span class="di-val">' + safeVal(v) + '</span></div>';
-    });
-
-    // Date
-    var ts = ev.timestamp || ev.ts || ev.fecha;
-    if (ts) html += '<div class="detail-item"><span class="di-label">Fecha</span><span class="di-val">' + fmtDate(ts) + '</span></div>';
-
-    // Method badge
-    if (ev.riskSource === 'manual' || ev.evaluationMethod === 'manual') {
-      html += '<div class="detail-item"><span class="di-label">Método</span><span class="di-val" style="color:#b45309;font-weight:700;">📋 Riesgo Manual</span></div>';
-    } else if (ev.evaluationMethod === 'isa' || ev.isaLevel) {
-      html += '<div class="detail-item"><span class="di-label">Método</span><span class="di-val" style="color:#0f3320;font-weight:700;">📊 ISA TRAQ</span></div>';
-    }
-
+    // ═══ 5. ALL FORM ANSWERS (every QS question) ═══
     var qs = window.QS || [];
-    qs.forEach(function (q) {
-      if (q.type === 'risk_target_group') return; // handled separately
-      // skip identification fields already shown above
-      if (['arbolId','especie','cliente','evaluador'].indexOf(q.id) !== -1) return;
-
-      // Support both top-level ev and legacy ev.answers
-      var val = (ev[q.id] !== undefined && ev[q.id] !== null) ? ev[q.id]
-              : (ans[q.id] !== undefined && ans[q.id] !== null) ? ans[q.id]
-              : undefined;
-      if (val === undefined || val === null) return;
-
+    var formContent = '';
+    qs.forEach(function(q) {
+      if (q.type === 'risk_target_group') return; // shown separately
+      if (['arbolId','especie','cliente','evaluador'].indexOf(q.id) !== -1) return; // already in ID section
+      var val = gv(q.id);
+      if (val === null || val === undefined) return;
       if (q.type === 'group' && q.fields) {
         var grp = (typeof val === 'object' && !Array.isArray(val)) ? val : {};
-        q.fields.forEach(function (f) {
+        q.fields.forEach(function(f) {
           var fv = grp[f.id];
-          if (fv === undefined || fv === null || fv === '') return;
-          html += '<div class="detail-item"><span class="di-label">' + f.label + '</span><span class="di-val">' + safeVal(fv) + '</span></div>';
+          if (fv !== undefined && fv !== null && fv !== '') {
+            formContent += row(f.label, fv);
+          }
         });
         return;
       }
-
-      var displayVal = Array.isArray(val) ? val.join(', ') : safeVal(val);
-      html += '<div class="detail-item"><span class="di-label">' + q.label + '</span><span class="di-val">' + displayVal + '</span></div>';
+      formContent += row(q.label, val);
     });
-    html += '</div>';
+    if (formContent) html += section('Respuestas del Formulario ISA TRAQ', formContent, '📋');
 
-    // Diana groups special display
+    // ═══ 6. DIANA GROUPS — full detail ═══
     var dianaGroups = [
-      { key: 'copa_dianas',   label: 'Dianas Copa' },
-      { key: 'tronco_dianas', label: 'Dianas Tronco' },
-      { key: 'raices_dianas', label: 'Dianas Raíces' }
+      { key: 'copa_dianas',   label: 'Dianas Copa',   icon: '🌿' },
+      { key: 'tronco_dianas', label: 'Dianas Tronco', icon: '🪵' },
+      { key: 'raices_dianas', label: 'Dianas Raíces', icon: '🌱' }
     ];
-    dianaGroups.forEach(function (dg) {
-      var arr = ev[dg.key];
+    dianaGroups.forEach(function(dg) {
+      var arr = ev[dg.key] || ans[dg.key];
       if (!arr || !arr.length) return;
-      html += '<div style="margin-top:10px;">';
-      html += '<span class="detail-sec-title">' + dg.label + '</span>';
-      arr.forEach(function (d) {
-        var dr = d.riesgo || 'bajo';
-        var dc = getRiskColor(dr);
-        html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:9px;border:1.5px solid ' + dc + ';background:' + dc + '1a;margin-bottom:5px;">';
-        html += '<div style="width:10px;height:10px;border-radius:50%;background:' + dc + ';flex-shrink:0;"></div>';
-        html += '<div style="flex:1;font-size:11px;font-weight:600;">';
-        if (d.diana || d.ocupacion) html += '<div>' + safeVal(d.diana || d.ocupacion) + '</div>';
-        if (d.prob_fallo) html += '<div style="color:#7a746e;">Prob. fallo: ' + d.prob_fallo + '</div>';
-        if (d.impacto) html += '<div style="color:#7a746e;">Impacto: ' + d.impacto + '</div>';
-        html += '</div>';
-        html += '<span style="font-size:9px;font-weight:800;text-transform:uppercase;color:#fff;background:' + dc + ';padding:2px 8px;border-radius:20px;">' + getRiskLabel(dr) + '</span>';
-        html += '</div>';
+      var dContent = '';
+      arr.forEach(function(d, idx) {
+        var dr  = d.riesgo || 'bajo';
+        var dc  = getRiskColor(dr);
+        dContent +=
+          '<div style="border:1.5px solid ' + dc + ';border-radius:9px;background:' + dc + '0f;padding:10px 12px;margin-bottom:8px;">' +
+            '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">' +
+              '<span style="font-size:12px;font-weight:800;color:#1a1a1a;">' + dg.icon + ' ' + safeVal(d.diana || d.ocupacion || ('Diana ' + (idx+1))) + '</span>' +
+              '<span style="font-size:10px;font-weight:800;text-transform:uppercase;color:#fff;background:' + dc + ';padding:2px 10px;border-radius:20px;">' + getRiskLabel(dr) + '</span>' +
+            '</div>' +
+            (d.prob_fallo   ? '<div style="font-size:11px;color:#374151;margin-bottom:2px;"><strong>Prob. fallo:</strong> ' + d.prob_fallo   + '</div>' : '') +
+            (d.impacto      ? '<div style="font-size:11px;color:#374151;margin-bottom:2px;"><strong>Impacto:</strong> '      + d.impacto      + '</div>' : '') +
+            (d.conseq || d.consecuencia ? '<div style="font-size:11px;color:#374151;margin-bottom:2px;"><strong>Consecuencia:</strong> ' + safeVal(d.conseq || d.consecuencia) + '</div>' : '') +
+            (d.probComb     ? '<div style="font-size:11px;color:#374151;"><strong>Prob. combinada:</strong> '  + d.probComb     + '</div>' : '') +
+          '</div>';
       });
-      html += '</div>';
+      html += section(dg.label + ' (' + arr.length + ')', dContent, dg.icon);
     });
 
-    html += '</div>'; // detail-section
+    // ═══ 7. BIOMETRÍA RINNTECH ═══
+    var bioContent = '';
+    var rinnFields = [
+      { k:'H', l:'Altura total (H)' }, { k:'C', l:'Inicio copa (C)' },
+      { k:'Di', l:'Diám. sección intacta (Di)' }, { k:'Hd', l:'Altura defecto (Hd)' },
+      { k:'Dd', l:'Diám. exterior defecto (Dd)' }, { k:'tActual', l:'Pared residual (t_actual)' },
+      { k:'topologia', l:'Topología' }
+    ];
+    rinnFields.forEach(function(f) {
+      var v = gv(f.k);
+      if (v !== null) bioContent += row(f.l, v);
+    });
+    if (ev.tReq !== null && ev.tReq !== undefined) bioContent += row('Pared mínima requerida (t_req)', safeVal(ev.tReq) + ' mm');
+    if (ev.bioMargin !== null && ev.bioMargin !== undefined) {
+      var marginOk = typeof ev.bioMargin === 'number' && ev.bioMargin >= 100;
+      bioContent += row('Margen estructural (%)', (typeof ev.bioMargin === 'number' ? ev.bioMargin.toFixed(1) + '%' : ev.bioMargin) + (marginOk ? ' ✅' : ' ⚠️'));
+    }
+    if (bioContent) html += section('Biometría Rinntech', bioContent, '🔬');
 
-    // 6. GPS
-    var gpsStr = typeof window._normalizeGPS === 'function' ? window._normalizeGPS(ev) : (ev.gps || (ev.lat && ev.lng ? ev.lat + ',' + ev.lng : ''));
-    if (gpsStr) {
-      var gpsParts = String(gpsStr).split(',');
-      var gpsLat = parseFloat(gpsParts[0]);
-      var gpsLng = parseFloat(gpsParts[1]);
-      if (!isNaN(gpsLat) && !isNaN(gpsLng)) {
-        html += '<div class="detail-section">';
-        html += '<span class="detail-sec-title">Ubicación GPS</span>';
-        html += '<a href="https://maps.google.com/?q=' + gpsLat + ',' + gpsLng + '" target="_blank" style="display:flex;align-items:center;gap:8px;padding:11px 14px;background:#f0fdf4;border:1px solid #86efac;border-radius:10px;text-decoration:none;color:#15803d;font-weight:700;font-size:13px;">';
-        html += '📍 ' + gpsLat.toFixed(6) + ', ' + gpsLng.toFixed(6);
-        html += ' <span style="margin-left:auto;font-size:11px;">Ver en Maps ›</span>';
-        html += '</a></div>';
-      }
+    // ═══ 8. GPS ═══
+    var _gpsObj = ev.gps || ans.gps || null;
+    var gpLat = null, gpLng = null, gpAcc = null, gpSrc = null;
+    if (_gpsObj && typeof _gpsObj === 'object' && _gpsObj.lat) {
+      gpLat = parseFloat(_gpsObj.lat); gpLng = parseFloat(_gpsObj.lng);
+      gpAcc = _gpsObj.acc; gpSrc = _gpsObj.source;
+    } else if (typeof _gpsObj === 'string' && _gpsObj.indexOf(',') !== -1) {
+      var _gp = _gpsObj.split(','); gpLat = parseFloat(_gp[0]); gpLng = parseFloat(_gp[1]);
+    } else if (ev.lat && ev.lng) {
+      gpLat = parseFloat(ev.lat); gpLng = parseFloat(ev.lng);
+    }
+    if (!isNaN(gpLat) && !isNaN(gpLng) && gpLat && gpLng) {
+      var gpsContent =
+        '<a href="https://maps.google.com/?q=' + gpLat + ',' + gpLng + '" target="_blank" ' +
+          'style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;text-decoration:none;color:#15803d;font-weight:700;font-size:12px;margin-bottom:6px;">' +
+          '📍 ' + gpLat.toFixed(6) + ', ' + gpLng.toFixed(6) +
+          (gpAcc ? ' <span style="font-size:10px;color:#6b7280;font-weight:400;">±' + Math.round(gpAcc) + 'm</span>' : '') +
+          (gpSrc === 'ip' ? ' <span style="font-size:9px;color:#f59e0b;">(aprox. por IP)</span>' : '') +
+          '<span style="margin-left:auto;font-size:11px;">Ver en Maps →</span>' +
+        '</a>';
+      html += section('Ubicación GPS', gpsContent, '📍');
     }
 
-    // 7. Risk override
-    var ovActive = (ev.riskOverride && ev.riskOverride.active) ? true : false;
-    var ovLevel = ev.riskOverride && ev.riskOverride.level ? ev.riskOverride.level : risk;
-    var ovReason = ev.riskOverride && ev.riskOverride.reason ? ev.riskOverride.reason : '';
+    // ═══ 9. WEATHER DATA ═══
+    var wx = ev.weatherData || ans.weatherData;
+    if (wx && typeof wx === 'object') {
+      var wxContent = '';
+      if (wx.temp !== undefined)      wxContent += row('Temperatura', wx.temp + ' °C');
+      if (wx.humidity !== undefined)  wxContent += row('Humedad', wx.humidity + ' %');
+      if (wx.windSpeed !== undefined) wxContent += row('Viento', wx.windSpeed + ' m/s');
+      if (wx.windDir !== undefined)   wxContent += row('Dirección viento', wx.windDir);
+      if (wx.description)             wxContent += row('Condición', wx.description);
+      if (wxContent) html += section('Datos Climáticos al Evaluar', wxContent, '🌤️');
+    }
 
-    html += '<div class="detail-section">';
-    html += '<span class="detail-sec-title">Override de Riesgo</span>';
-    html += '<div class="risk-override-box">';
-    html += '<div class="override-row">';
-    html += '<span class="override-label">Activar override manual de riesgo</span>';
-    html += '<label class="toggle-switch"><input type="checkbox" id="ov-toggle-' + key + '" ' + (ovActive ? 'checked' : '') + ' onchange="toggleRiskOverride(\'' + key + '\',this.checked)"><span class="toggle-slider"></span></label>';
-    html += '</div>';
-    html += '<div id="ov-fields-' + key + '" style="display:' + (ovActive ? 'flex' : 'none') + ';flex-direction:column;gap:8px;">';
-    html += '<select id="ov-level-' + key + '" class="override-select">';
-    ['bajo','moderado','alto','extremo'].forEach(function (lvl) {
-      html += '<option value="' + lvl + '"' + (ovLevel === lvl ? ' selected' : '') + '>' + getRiskLabel(lvl) + '</option>';
-    });
-    html += '</select>';
-    html += '<textarea id="ov-reason-' + key + '" class="override-note" placeholder="Motivo del override...">' + ovReason + '</textarea>';
-    html += '<button onclick="saveRiskOverride(\'' + key + '\')" class="override-save-btn">💾 Guardar Override</button>';
-    html += '</div>';
-    html += '</div></div>';
+    // ═══ 10. NOTES ═══
+    var noteContent =
+      '<textarea id="detail-notes-' + key + '" ' +
+        'style="width:100%;min-height:80px;padding:10px 12px;border:1.5px solid #e8e4dd;border-radius:10px;font-family:inherit;font-size:13px;resize:vertical;outline:none;line-height:1.5;box-sizing:border-box;" ' +
+        'placeholder="Añade notas, observaciones del campo...">' +
+        safeVal(ev.notes === '—' ? '' : (ev.notes || '')) +
+      '</textarea>' +
+      '<button onclick="saveTreeNotes(\'' + key + '\')" ' +
+        'style="margin-top:6px;padding:9px 20px;background:#0f3320;color:#fff;border:none;border-radius:9px;font-weight:700;font-size:12px;cursor:pointer;width:100%;">💾 Guardar notas</button>';
+    html += section('Notas del Técnico', noteContent, '📝');
 
-    // 8. Actions
-    html += '<div class="detail-section" style="margin-top:20px;display:flex;flex-direction:column;gap:8px;">';
-    html += '<button onclick="dbExportTreePDF(\'' + key + '\')" style="width:100%;padding:12px;background:#1d4ed8;color:#fff;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;">📄 Descargar PDF de este árbol</button>';
-    html += '<button onclick="closeModal();window.masNewISAFromKey && window.masNewISAFromKey(\'' + key + '\')" style="width:100%;padding:12px;background:#0f3320;color:#fff;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;">📊 Nueva evaluación ISA TRAQ</button>';
-    html += '<button onclick="if(confirm(\'¿Eliminar esta evaluación?\'))deleteEval(\'' + key + '\')" style="width:100%;padding:12px;background:#fee2e2;color:#b91c1c;border:1.5px solid #fecaca;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;">🗑 Eliminar evaluación</button>';
-    html += '</div>';
+    // ═══ 11. RISK OVERRIDE ═══
+    var ovActive = ev.riskOverride && ev.riskOverride.active;
+    var ovLevel  = (ev.riskOverride && ev.riskOverride.level) ? ev.riskOverride.level : risk;
+    var ovReason = (ev.riskOverride && ev.riskOverride.reason) ? ev.riskOverride.reason : '';
+    var ovContent =
+      '<div class="risk-override-box">' +
+        '<div class="override-row">' +
+          '<span class="override-label">Activar override manual de riesgo</span>' +
+          '<label class="toggle-switch"><input type="checkbox" id="ov-toggle-' + key + '" ' + (ovActive ? 'checked' : '') + ' onchange="toggleRiskOverride(\'' + key + '\',this.checked)"><span class="toggle-slider"></span></label>' +
+        '</div>' +
+        '<div id="ov-fields-' + key + '" style="display:' + (ovActive ? 'flex' : 'none') + ';flex-direction:column;gap:8px;">' +
+          '<select id="ov-level-' + key + '" class="override-select">' +
+          ['bajo','moderado','alto','extremo'].map(function(lvl) {
+            return '<option value="' + lvl + '"' + (ovLevel === lvl ? ' selected' : '') + '>' + getRiskLabel(lvl) + '</option>';
+          }).join('') +
+          '</select>' +
+          '<textarea id="ov-reason-' + key + '" class="override-note" placeholder="Motivo del override...">' + ovReason + '</textarea>' +
+          '<button onclick="saveRiskOverride(\'' + key + '\')" class="override-save-btn">💾 Guardar Override</button>' +
+        '</div>' +
+      '</div>';
+    html += section('Override de Riesgo', ovContent, '⚡');
+
+    // ═══ 12. ACTIONS ═══
+    html +=
+      '<div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">' +
+        '<button onclick="dbExportTreePDF(\'' + key + '\')" style="width:100%;padding:12px;background:#1d4ed8;color:#fff;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;">📄 Descargar PDF completo</button>' +
+        '<button onclick="closeModal();window.masNewISAFromKey&&window.masNewISAFromKey(\'' + key + '\')" style="width:100%;padding:12px;background:#0f3320;color:#fff;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;">📊 Nueva evaluación ISA TRAQ</button>' +
+        '<button onclick="if(confirm(\'¿Eliminar esta evaluación?\'))deleteEval(\'' + key + '\')" style="width:100%;padding:12px;background:#fee2e2;color:#b91c1c;border:1.5px solid #fecaca;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;">🗑 Eliminar evaluación</button>' +
+      '</div>';
+
+    html += '</div>'; // main padding wrapper
 
     var modalBody = document.getElementById('modalBody');
     if (modalBody) modalBody.innerHTML = html;
