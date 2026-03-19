@@ -219,7 +219,7 @@
   border-top: 1px solid var(--border);
   display: flex;
   align-items: stretch;
-  z-index: 200;
+  z-index: 1000;   /* above Leaflet layers (max ~700) and all modals */
   /* safe area inset for notched iPhones */
   padding-bottom: env(safe-area-inset-bottom, 0px);
   box-shadow: 0 -1px 0 var(--border-light),
@@ -292,8 +292,7 @@
   flex: 1;
   overflow: hidden;
   min-height: 0;
-  /* Extend into the nav padding-bottom so map fills to screen edge */
-  margin-bottom: calc(-1 * var(--nav-h));
+  /* No negative margin — map stops cleanly above the bottom nav */
 }
 
 #viewHome.active {

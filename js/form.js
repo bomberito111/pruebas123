@@ -3,6 +3,20 @@
    Depends on: config.js, state.js
 ═══════════════════════════════════════════ */
 
+// ── FORM SCROLL HELPER ──
+// Centers the target element in #formScroll without jumping to the top.
+function _scrollToFormEl(el) {
+  if (!el) return;
+  var container = document.getElementById('formScroll');
+  if (!container) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+  // Use offsetTop relative to the container for reliability
+  var elTop = 0;
+  var node = el;
+  while (node && node !== container) { elTop += node.offsetTop; node = node.offsetParent; }
+  var targetScroll = elTop - Math.max(0, (container.clientHeight / 2) - (el.offsetHeight / 2));
+  container.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
+}
+
 // ── FORM STATE ──
 var _answers = {};
 var _gpsCoords = null;
@@ -595,13 +609,13 @@ function afterSubmit(idx) {
 
   updateProgress();
 
-  // Scroll to next unanswered or results
+  // Scroll to next unanswered or results — center in the scroll container
   setTimeout(function() {
     var targetEl = nextIdx >= 0
       ? document.getElementById('qblock-' + nextIdx)
       : document.getElementById('formResultsArea');
-    if (targetEl) targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, 80);
+    _scrollToFormEl(targetEl);
+  }, 120);
 }
 
 function editQuestion(idx) {
@@ -621,11 +635,10 @@ function editQuestion(idx) {
   // Apply state machine — make this block current
   unlockUpTo(idx);
 
-  // Scroll to it
+  // Scroll to it — center in the scroll container
   setTimeout(function() {
-    var el = document.getElementById('qblock-' + idx);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, 80);
+    _scrollToFormEl(document.getElementById('qblock-' + idx));
+  }, 120);
 
   // Update results
   var resultsArea = document.getElementById('formResultsArea');

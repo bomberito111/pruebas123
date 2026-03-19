@@ -263,6 +263,20 @@
   };
 
   // ─────────────────────────────────────────
+  // INDIVIDUAL TREE PDF
+  // ─────────────────────────────────────────
+
+  window.dbExportTreePDF = function (key) {
+    var db = window._dbAll || {};
+    var ev = db[key];
+    if (!ev) { showNotif('Evaluación no encontrada', 'error'); return; }
+    if (!window.APP) window.APP = {};
+    window.APP.selectedTrees = [key];
+    showNotif('Preparando PDF del árbol ' + (ev.arbolId || key) + '...');
+    setTimeout(function () { window.exportToPDF(); }, 300);
+  };
+
+  // ─────────────────────────────────────────
   // EXPORT FUNCTIONS
   // ─────────────────────────────────────────
 
@@ -1096,6 +1110,7 @@
 
     // 8. Actions
     html += '<div class="detail-section" style="margin-top:20px;display:flex;flex-direction:column;gap:8px;">';
+    html += '<button onclick="dbExportTreePDF(\'' + key + '\')" style="width:100%;padding:12px;background:#1d4ed8;color:#fff;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;">📄 Descargar PDF de este árbol</button>';
     html += '<button onclick="closeModal();window.masNewISAFromKey && window.masNewISAFromKey(\'' + key + '\')" style="width:100%;padding:12px;background:#0f3320;color:#fff;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;">📊 Nueva evaluación ISA TRAQ</button>';
     html += '<button onclick="if(confirm(\'¿Eliminar esta evaluación?\'))deleteEval(\'' + key + '\')" style="width:100%;padding:12px;background:#fee2e2;color:#b91c1c;border:1.5px solid #fecaca;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;">🗑 Eliminar evaluación</button>';
     html += '</div>';

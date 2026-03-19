@@ -137,10 +137,13 @@ window.refreshHomeMap = function () {
     }
   });
 
+  var riskFilter = (window.APP && window.APP.homeRiskFilter) || '';
   var bounds = [];
   Object.keys(latest).forEach(function (arbolId) {
     var item = latest[arbolId];
     var d = item.data;
+    // Apply risk filter — skip markers that don't match
+    if (riskFilter && window.getEffectiveRisk(d) !== riskFilter) return;
     // Use GPS from any evaluation if latest doesn't have one
     var gpsItem = gpsSource[arbolId];
     var gps = gpsItem ? gpsItem.gps : null;
@@ -510,6 +513,11 @@ window.homeRenderTrees = function () {
 var _RISK_DOT_COLORS = {
   'extremo': '#dc2626', 'alto': '#ea580c', 'moderado': '#ca8a04', 'bajo': '#15803d', '': '#9ca3af'
 };
+// rgba versions for clean button backgrounds (avoids 8-digit hex incompatibility)
+var _RISK_RGBA_BG = {
+  'extremo': 'rgba(220,38,38,0.15)', 'alto': 'rgba(234,88,12,0.15)',
+  'moderado': 'rgba(202,138,4,0.15)', 'bajo': 'rgba(21,128,61,0.15)'
+};
 var _RISK_LABELS_ES = {
   'extremo': 'Extremo', 'alto': 'Alto', 'moderado': 'Moderado', 'bajo': 'Bajo', '': 'Todos'
 };
@@ -521,8 +529,26 @@ function _updateFilterBtn(lvl) {
   if (dot)   dot.style.background = _RISK_DOT_COLORS[lvl] || '#9ca3af';
   if (label) label.textContent    = _RISK_LABELS_ES[lvl] || 'Todos';
   if (btn) {
-    btn.style.borderColor = lvl ? (_RISK_DOT_COLORS[lvl] + '66') : '#d4cfc5';
-    btn.style.background  = lvl ? (_RISK_DOT_COLORS[lvl] + '14') : '#f4f1eb';
+    if (lvl) {
+      btn.style.cssText = [
+        'height:36px', 'padding:0 12px',
+        'background:' + (_RISK_RGBA_BG[lvl] || 'rgba(255,255,255,.97)'),
+        'border:2px solid ' + (_RISK_DOT_COLORS[lvl] || '#d4cfc5'),
+        'border-radius:22px', 'font-size:11px', 'font-weight:700',
+        'cursor:pointer', 'font-family:"IBM Plex Sans",sans-serif',
+        'white-space:nowrap', 'display:flex', 'align-items:center',
+        'gap:5px', 'color:#111', 'box-shadow:0 4px 18px rgba(0,0,0,.22)'
+      ].join(';');
+    } else {
+      btn.style.cssText = [
+        'height:36px', 'padding:0 12px',
+        'background:rgba(255,255,255,.97)',
+        'border:none', 'border-radius:22px', 'font-size:11px', 'font-weight:700',
+        'cursor:pointer', 'font-family:"IBM Plex Sans",sans-serif',
+        'white-space:nowrap', 'display:flex', 'align-items:center',
+        'gap:5px', 'color:#3d3830', 'box-shadow:0 4px 18px rgba(0,0,0,.22)'
+      ].join(';');
+    }
   }
 }
 
@@ -530,7 +556,9 @@ window.homeSetRisk = function (lvl) {
   // Toggle off if same filter tapped again
   window.APP.homeRiskFilter = (window.APP.homeRiskFilter === lvl && lvl !== '') ? '' : lvl;
   _updateFilterBtn(window.APP.homeRiskFilter);
+  // Refresh BOTH the list panel AND the map markers
   window.homeRenderTrees();
+  window.refreshHomeMap();
 };
 
 window.homeToggleRiskMenu = function (e) {
@@ -912,8 +940,9 @@ window.openHomeSearch = function () {
   if (sheet) sheet.classList.add('open');
   setTimeout(function () {
     var inp = document.getElementById('homeSearchInput');
-    if (inp) { inp.value = ''; inp.focus(); }
-    window.homeSearchFilter();
+    if (inp) { inp.value = ''; }
+    window.homeSearchFilter(); // show all trees + client info immediately
+    if (inp) inp.focus();
   }, 80);
 };
 
@@ -1098,7 +1127,14 @@ window.saveQuickNote = function () {
 ───────────────────────────────────────── */
 window.homeAddClientPhoto = function () {
   var activeClient = window.APP && window.APP.activeClient;
-  if (!activeClient) { window.showNotif('⚠️ Selecciona un cliente primero'); return; }
+  if (!activeClient) {
+    // No client selected — open client selector then come back
+    if (typeof window.openClientSelector === 'function') {
+      window.showNotif('⚠️ Selecciona un cliente para asignar la foto', 'info');
+      window.openClientSelector();
+    }
+    return;
+  }
   var inp = document.getElementById('clientPhotoInput');
   if (inp) inp.click();
 };
@@ -1160,7 +1196,13 @@ async function _saveClientPhoto(clientName, photoUrl) {
 ───────────────────────────────────────── */
 window.homeAddClientFile = function () {
   var activeClient = window.APP && window.APP.activeClient;
-  if (!activeClient) { window.showNotif('⚠️ Selecciona un cliente primero'); return; }
+  if (!activeClient) {
+    if (typeof window.openClientSelector === 'function') {
+      window.showNotif('⚠️ Selecciona un cliente para asignar el archivo', 'info');
+      window.openClientSelector();
+    }
+    return;
+  }
   var inp = document.getElementById('clientFileInput');
   if (inp) inp.click();
 };

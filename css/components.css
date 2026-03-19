@@ -497,12 +497,12 @@
 .q-block {
   padding: 18px 16px;
   border-bottom: 1px solid var(--border-light);
-  transition: opacity 0.25s ease,
-              transform 0.25s ease,
+  transition: opacity 0.3s ease,
+              transform 0.3s ease,
               background 0.25s ease,
               box-shadow 0.20s ease;
-  opacity: 0.25;
-  transform: translateY(15px);
+  opacity: 0.2;
+  transform: none;
   pointer-events: none;
 }
 
@@ -525,7 +525,7 @@
 .q-block.locked {
   opacity: 0.15;
   pointer-events: none;
-  transform: translateY(10px);
+  transform: none;
 }
 
 .q-num {

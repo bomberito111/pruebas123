@@ -28,20 +28,20 @@ body{font-family:'IBM Plex Sans',system-ui,sans-serif;background:var(--paper,#fa
 /* Tablet/medium (≥600px): expand to full viewport, bottom nav stays */
 @media(min-width:600px){
   #app{max-width:none;margin:0;width:100%}
-  #dbLv1List,#dbLv2List{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;align-items:start}
+  #db-lv1-list,#db-lv2-list{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(280px,1fr))!important;gap:12px!important;align-items:start!important;flex-direction:unset!important}
 }
 /* Desktop (≥1024px): sidebar layout */
 @media(min-width:1024px){
   #app{max-width:none;margin:0;width:100%}
   .app-header{left:220px!important;width:calc(100% - 220px)!important;max-width:none!important;transform:none!important}
   .views-wrap{margin-left:220px!important;padding-bottom:0!important;padding-top:var(--header-h,56px)!important}
-  #mainNav{position:fixed!important;top:0!important;left:0!important;right:auto!important;bottom:0!important;width:220px!important;max-width:220px!important;height:100vh!important;display:flex!important;flex-direction:column!important;border-top:none!important;border-right:1px solid var(--border,#d4cfc5)!important;transform:none!important;padding-bottom:0!important;box-shadow:1px 0 12px rgba(0,0,0,.08)!important;overflow-y:auto!important;justify-content:flex-start!important;align-items:stretch!important;background:#fff!important;z-index:300!important}
+  #mainNav{position:fixed!important;top:0!important;left:0!important;right:auto!important;bottom:0!important;width:220px!important;max-width:220px!important;height:100vh!important;display:flex!important;flex-direction:column!important;border-top:none!important;border-right:1px solid var(--border,#d4cfc5)!important;transform:none!important;padding-bottom:0!important;box-shadow:1px 0 12px rgba(0,0,0,.08)!important;overflow-y:auto!important;justify-content:flex-start!important;align-items:stretch!important;background:#fff!important;z-index:1000!important}
   #mainNav::before{content:'🌳 Bosques Urbanos';display:flex;align-items:center;min-height:60px;padding:0 18px;font-family:'Fraunces',Georgia,serif;font-size:14px;font-weight:700;color:#0f3320;border-bottom:1px solid var(--border,#d4cfc5);white-space:nowrap;flex-shrink:0}
   .nav-tab{flex:none!important;width:100%!important;flex-direction:row!important;align-items:center!important;justify-content:flex-start!important;gap:12px!important;padding:15px 20px!important;font-size:13px!important;text-align:left!important;border-bottom:1px solid var(--border-light,#ece8e0)!important;border-radius:0!important}
   .nav-tab::before{display:none!important}
   .nav-tab.active{background:var(--forest-50,#f0fdf4)!important;border-left:3px solid #166534!important;padding-left:17px!important;color:#0f3320!important}
   .nav-icon{font-size:20px!important;flex-shrink:0!important}
-  #dbLv1List,#dbLv2List{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;align-items:start}
+  #db-lv1-list,#db-lv2-list{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))!important;gap:16px!important;align-items:start!important;flex-direction:unset!important}
   .modal-sheet{max-width:640px!important;margin:auto!important;border-radius:16px!important;max-height:85vh!important}
   .form-scroll{max-width:700px!important;margin:0 auto!important;padding:0 24px!important}
   .db-header{padding:16px 32px!important}
@@ -210,12 +210,11 @@ body{font-family:'IBM Plex Sans',system-ui,sans-serif;background:var(--paper,#fa
               <div id="panel-client-name" style="font-family:'Fraunces',serif;font-size:13px;font-weight:900;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Sin cliente seleccionado</div>
               <div id="panel-client-stats" style="font-size:10px;color:#86efac;font-weight:600;margin-top:1px"></div>
             </div>
-            <!-- Action icon buttons: 🔍 buscar todo | 📷 añadir foto al cliente | 📁 añadir archivo al cliente | ℹ️ info -->
+            <!-- Action icon buttons: 🔍 buscar+info | 📷 añadir foto | 📁 añadir archivo -->
             <div style="display:flex;gap:6px;flex-shrink:0">
-              <button onclick="openHomeSearch()" title="Buscar árboles, fotos y datos del cliente" style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center">🔍</button>
-              <button onclick="homeAddClientPhoto()" title="Añadir foto al cliente" style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center">📷</button>
-              <button onclick="homeAddClientFile()" title="Añadir archivo al cliente" style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center">📁</button>
-              <button id="btn-client-info" onclick="openClientInfoSheet()" title="Info del cliente" style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center">ℹ️</button>
+              <button onclick="openHomeSearch()" title="Buscar árboles, fotos e info del cliente" style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.3);color:#fff;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center">🔍</button>
+              <button onclick="homeAddClientPhoto()" title="Añadir foto al cliente" style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.3);color:#fff;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center">📷</button>
+              <button onclick="homeAddClientFile()" title="Añadir archivo al cliente" style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.3);color:#fff;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center">📁</button>
             </div>
             <!-- Hidden file inputs for client-level photo/file upload -->
             <input type="file" id="clientPhotoInput" accept="image/*" capture="environment" style="display:none" onchange="homeClientPhotoSelected(this)">
@@ -246,16 +245,24 @@ body{font-family:'IBM Plex Sans',system-ui,sans-serif;background:var(--paper,#fa
 
     </div><!-- end viewHome -->
 
-    <!-- ── SEARCH SHEET (tree search from map) ── -->
+    <!-- ── SEARCH SHEET (tree search + client info from map) ── -->
     <div class="modal-overlay" id="homeSearchSheet" style="z-index:2700">
-      <div class="modal-inner" style="border-radius:20px 20px 0 0;max-height:80vh;display:flex;flex-direction:column;overflow:hidden">
+      <div class="modal-inner" style="border-radius:20px 20px 0 0;max-height:88vh;display:flex;flex-direction:column;overflow:hidden">
         <div class="modal-drag"></div>
-        <div style="padding:12px 16px 8px;border-bottom:1px solid #e5e0d5;flex-shrink:0;display:flex;align-items:center;gap:10px">
-          <input type="search" id="homeSearchInput" placeholder="🔍 Árbol, especie, evaluador..." oninput="homeSearchFilter()" style="flex:1;padding:10px 14px;border:1.5px solid #d4cfc5;border-radius:12px;font-size:14px;font-family:'IBM Plex Sans',sans-serif;outline:none;background:#fafaf5">
-          <button onclick="closeHomeSearch()" style="width:32px;height:32px;border-radius:50%;border:1.5px solid #d4cfc5;background:#fff;font-size:14px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center">✕</button>
+        <div style="padding:12px 16px 10px;border-bottom:1px solid #e5e0d5;flex-shrink:0">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <input type="search" id="homeSearchInput" placeholder="🔍 Árbol, especie, cliente, evaluador..." oninput="homeSearchFilter()" style="flex:1;padding:10px 14px;border:1.5px solid #d4cfc5;border-radius:12px;font-size:14px;font-family:'IBM Plex Sans',sans-serif;outline:none;background:#fafaf5">
+            <button onclick="closeHomeSearch()" style="width:34px;height:34px;border-radius:50%;border:1.5px solid #d4cfc5;background:#fff;font-size:14px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center">✕</button>
+          </div>
+          <!-- Quick actions inside search -->
+          <div style="display:flex;gap:7px">
+            <button onclick="closeHomeSearch();homeAddClientPhoto()" style="flex:1;padding:8px 6px;background:#f0fdf4;border:1px solid #86efac;border-radius:10px;font-size:12px;font-weight:700;color:#15803d;cursor:pointer;font-family:'IBM Plex Sans',sans-serif">📷 Foto</button>
+            <button onclick="closeHomeSearch();homeAddClientFile()" style="flex:1;padding:8px 6px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;font-size:12px;font-weight:700;color:#1d4ed8;cursor:pointer;font-family:'IBM Plex Sans',sans-serif">📁 Archivo</button>
+            <button onclick="closeHomeSearch();openDocsModal(window.APP&&window.APP.activeClient)" style="flex:1;padding:8px 6px;background:#fefce8;border:1px solid #fde047;border-radius:10px;font-size:12px;font-weight:700;color:#854d0e;cursor:pointer;font-family:'IBM Plex Sans',sans-serif">📂 Ver docs</button>
+          </div>
         </div>
-        <div id="homeSearchList" style="flex:1;overflow-y:auto;padding:8px 12px 24px;-webkit-overflow-scrolling:touch">
-          <div style="padding:28px;text-align:center;color:#7a746e;font-size:13px;font-weight:600">Escribe para buscar árboles</div>
+        <div id="homeSearchList" style="flex:1;overflow-y:auto;padding:8px 12px 28px;-webkit-overflow-scrolling:touch">
+          <div style="padding:28px;text-align:center;color:#7a746e;font-size:13px;font-weight:600">Cargando datos del cliente...</div>
         </div>
       </div>
     </div>
@@ -319,7 +326,7 @@ body{font-family:'IBM Plex Sans',system-ui,sans-serif;background:var(--paper,#fa
           </div>
           <input type="search" class="db-search" placeholder="🔍 Buscar cliente..." oninput="dbRenderLv1()" id="lv1-search">
         </div>
-        <div class="db-scroll" id="db-lv1-list" style="flex:1;overflow-y:auto;padding:12px 14px 60px;display:flex;flex-direction:column;gap:10px;min-height:0;-webkit-overflow-scrolling:touch">
+        <div class="db-scroll" id="db-lv1-list" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:12px 14px 90px;display:flex;flex-direction:column;gap:12px;min-height:0;-webkit-overflow-scrolling:touch;scroll-behavior:smooth;align-content:flex-start">
           <div class="db-empty">🌱 Sin evaluaciones guardadas aún.</div>
         </div>
       </div>
@@ -350,7 +357,7 @@ body{font-family:'IBM Plex Sans',system-ui,sans-serif;background:var(--paper,#fa
             <button class="rf-chip" data-r="bajo" onclick="dbSetRisk(this,'bajo')">🟢 Bajo</button>
           </div>
         </div>
-        <div class="db-scroll" id="db-lv2-list" style="flex:1;overflow-y:auto;padding:12px 14px 60px;display:flex;flex-direction:column;gap:10px;min-height:0;-webkit-overflow-scrolling:touch"></div>
+        <div class="db-scroll" id="db-lv2-list" style="flex:1;overflow-y:auto;padding:12px 14px 90px;display:flex;flex-direction:column;gap:12px;min-height:0;-webkit-overflow-scrolling:touch;align-content:flex-start"></div>
       </div>
 
       <!-- Level 3: History of tree -->
