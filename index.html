@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0f3320">
+<title>Bosques Urbanos · ISA TRAQ Asset Management</title>
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;700&family=Fraunces:opsz,wght@9..144,700;9..144,900&display=swap" rel="stylesheet">
+
+<!-- Leaflet -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- App CSS (chained: components imports layout imports base imports vars) -->
+<link rel="stylesheet" href="css/components.css">
+
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden}
+body{font-family:'IBM Plex Sans',system-ui,sans-serif;background:var(--paper,#faf9f5);color:var(--ink,#1a1a1a);display:flex;flex-direction:column}
+#app{display:flex;flex-direction:column;height:100%;overflow:hidden;max-width:480px;margin:0 auto;width:100%;position:relative}
+@media print{body>*:not(#print-container){display:none!important}#print-container{display:block!important;position:static;width:100%;background:#fff;padding:20px;color:#000;overflow:visible}@page{margin:1.5cm}}
+#print-container{display:none}
+</style>
+</head>
+<body>
+
+<!-- Print Container -->
+<div id="print-container"></div>
+
+<!-- ═══════════════════════════════════════════
+     LOGIN SCREEN (shown before #app)
+═══════════════════════════════════════════ -->
+<div id="loginScreen" style="display:flex;position:fixed;inset:0;z-index:9999;background:linear-gradient(160deg,#0a2410 0%,#0f3320 45%,#166534 100%);flex-direction:column;align-items:center;justify-content:center;padding:24px;font-family:'IBM Plex Sans',system-ui,sans-serif">
+
+  <!-- Logo -->
+  <div style="text-align:center;margin-bottom:36px">
+    <div style="font-size:52px;margin-bottom:10px;filter:drop-shadow(0 4px 12px rgba(0,0,0,.3))">🌳</div>
+    <div id="loginScreenTitle" style="font-family:'Fraunces',serif;font-size:28px;font-weight:900;color:#fff;line-height:1.1">Bosques Urbanos</div>
+    <div style="font-size:11px;font-weight:700;color:#86efac;letter-spacing:2px;text-transform:uppercase;margin-top:6px">ISA TRAQ · Asset Management</div>
+  </div>
+
+  <!-- Normal login form -->
+  <div id="loginNormal" style="width:100%;max-width:360px">
+    <div style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:24px;backdrop-filter:blur(8px)">
+      <input id="loginEmail" type="email" placeholder="Correo electrónico" autocomplete="username" onkeydown="loginKeydown(event)"
+        style="width:100%;padding:13px 16px;border:1.5px solid rgba(255,255,255,.15);border-radius:11px;font-family:'IBM Plex Sans',sans-serif;font-size:14px;color:#fff;background:rgba(255,255,255,.08);margin-bottom:10px;display:block;box-sizing:border-box;-webkit-appearance:none">
+      <input id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password" onkeydown="loginKeydown(event)"
+        style="width:100%;padding:13px 16px;border:1.5px solid rgba(255,255,255,.15);border-radius:11px;font-family:'IBM Plex Sans',sans-serif;font-size:14px;color:#fff;background:rgba(255,255,255,.08);margin-bottom:14px;display:block;box-sizing:border-box;-webkit-appearance:none">
+      <div id="loginError" style="display:none;color:#fca5a5;font-size:12px;font-weight:600;margin-bottom:12px;padding:10px 12px;background:rgba(239,68,68,.15);border-radius:9px;text-align:center"></div>
+      <button id="loginBtn" onclick="handleLogin()"
+        style="width:100%;padding:14px;background:#22c55e;color:#0a2410;border:none;border-radius:12px;font-weight:800;font-size:15px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;letter-spacing:.3px;transition:opacity .15s">
+        Ingresar →
+      </button>
+    </div>
+  </div>
+
+  <!-- First-time setup form (hidden) -->
+  <div id="loginFirstSetup" style="display:none;width:100%;max-width:360px">
+    <div style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.18);border-radius:20px;padding:24px;backdrop-filter:blur(8px)">
+      <div style="color:#86efac;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Primera vez</div>
+      <div style="color:#fff;font-size:13px;margin-bottom:16px;opacity:.8">Crea la cuenta de programador para comenzar.</div>
+      <input id="setupNombre" type="text" placeholder="Tu nombre completo *" style="width:100%;padding:12px 15px;border:1.5px solid rgba(255,255,255,.15);border-radius:10px;font-family:'IBM Plex Sans',sans-serif;font-size:13px;color:#fff;background:rgba(255,255,255,.08);margin-bottom:8px;display:block;box-sizing:border-box">
+      <input id="setupEmail" type="email" placeholder="Correo electrónico *" style="width:100%;padding:12px 15px;border:1.5px solid rgba(255,255,255,.15);border-radius:10px;font-family:'IBM Plex Sans',sans-serif;font-size:13px;color:#fff;background:rgba(255,255,255,.08);margin-bottom:8px;display:block;box-sizing:border-box">
+      <input id="setupPass" type="password" placeholder="Contraseña (mín. 6 caracteres) *" style="width:100%;padding:12px 15px;border:1.5px solid rgba(255,255,255,.15);border-radius:10px;font-family:'IBM Plex Sans',sans-serif;font-size:13px;color:#fff;background:rgba(255,255,255,.08);margin-bottom:8px;display:block;box-sizing:border-box">
+      <input id="setupPass2" type="password" placeholder="Confirmar contraseña *" style="width:100%;padding:12px 15px;border:1.5px solid rgba(255,255,255,.15);border-radius:10px;font-family:'IBM Plex Sans',sans-serif;font-size:13px;color:#fff;background:rgba(255,255,255,.08);margin-bottom:12px;display:block;box-sizing:border-box">
+      <div id="setupError" style="display:none;color:#fca5a5;font-size:12px;font-weight:600;margin-bottom:10px;padding:9px 12px;background:rgba(239,68,68,.15);border-radius:9px;text-align:center"></div>
+      <button id="setupBtn" onclick="handleFirstSetup()" style="width:100%;padding:13px;background:#22c55e;color:#0a2410;border:none;border-radius:11px;font-weight:800;font-size:14px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif">Crear cuenta programador</button>
+    </div>
+  </div>
+
+  <div style="margin-top:28px;font-size:11px;color:rgba(255,255,255,.3)">Bosques Urbanos v6.0 · Powered by Firebase</div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     ADMIN PANEL MODAL
+═══════════════════════════════════════════ -->
+<div id="adminPanelModal" style="display:none;position:fixed;inset:0;z-index:5000;background:rgba(10,36,16,.6);backdrop-filter:blur(4px);flex-direction:column;align-items:center;justify-content:flex-end">
+  <div style="width:100%;max-width:480px;background:#faf9f5;border-radius:24px 24px 0 0;max-height:90vh;display:flex;flex-direction:column">
+    <!-- Handle -->
+    <div style="height:5px;width:44px;background:#d1d5db;border-radius:3px;margin:12px auto 0;flex-shrink:0"></div>
+    <!-- Header -->
+    <div style="padding:14px 20px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e5e0d8;flex-shrink:0">
+      <div>
+        <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:900;color:#0f3320">Panel de administración</div>
+        <div style="font-size:11px;color:#6b7280;font-weight:500;margin-top:1px" id="adminPanelSubtitle">Gestión de cuentas y permisos</div>
+      </div>
+      <button onclick="closeAdminPanel()" style="width:36px;height:36px;border-radius:50%;background:#f0ede8;border:none;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">✕</button>
+    </div>
+    <!-- Body -->
+    <div id="adminPanelBody" style="flex:1;overflow-y:auto;padding:16px 16px 32px;-webkit-overflow-scrolling:touch">
+      <div style="text-align:center;padding:30px;color:#6b7280">Cargando...</div>
+    </div>
+  </div>
+</div>
+
+<div id="app">
+
+  <!-- ═══ HEADER ═══ -->
+  <header class="app-header">
+    <div class="brand">
+      <div class="brand-icon">🌳</div>
+      <div class="brand-text">
+        <div class="brand-name">Bosques Urbanos</div>
+        <div class="brand-sub">ISA TRAQ · Asset Management</div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <div class="conn-dot off" id="connDot" title="Estado conexión"></div>
+      <!-- Admin panel button (visible only to admin/programador) -->
+      <button id="adminHeaderBtn" onclick="openAdminPanel()" title="Panel de administración" style="display:none;width:34px;height:34px;border-radius:50%;background:rgba(124,58,237,.25);border:1.5px solid rgba(124,58,237,.5);cursor:pointer;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;transition:background .15s">⚙️</button>
+      <!-- Dev console button (programador only) — "ahumado" style -->
+      <button id="devConsoleBtn" onclick="openDevConsole()" title="Consola de base de datos (Programador)" style="display:none;width:34px;height:34px;border-radius:8px;background:rgba(0,0,0,.55);border:1.5px solid rgba(255,255,255,.18);cursor:pointer;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;backdrop-filter:blur(4px);box-shadow:0 2px 8px rgba(0,0,0,.4);transition:background .15s;font-family:monospace;color:#4ade80">🖥️</button>
+      <button class="eng-pill" id="engPill" onclick="handleLogout()" title="Cerrar sesión">
+        <span style="font-size:10px;opacity:.5">👤</span>
+        <span id="engPillName" style="font-size:11px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px">Sin asignar</span>
+        <span style="font-size:9px;opacity:.5">▾</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ═══ VIEWS CONTAINER ═══ -->
+  <div class="views-wrap">
+
+    <!-- ─── VIEW: INICIO (full-screen map) ─── -->
+    <div class="view active" id="viewHome">
+
+      <div id="homeMapWrap">
+        <div id="homeLeafletMap"></div>
+
+        <!-- ── TOP OVERLAY: client selector + risk filter ── -->
+        <div style="position:absolute;top:10px;left:12px;right:12px;z-index:500;display:flex;align-items:center;gap:7px;pointer-events:none">
+
+          <!-- Client selector pill -->
+          <div onclick="openClientSelector()" style="pointer-events:auto;display:inline-flex;align-items:center;gap:7px;background:rgba(255,255,255,.97);border-radius:22px;padding:8px 14px;box-shadow:0 4px 18px rgba(0,0,0,.22);cursor:pointer;max-width:55%">
+            <span id="home-map-client-dot" style="width:9px;height:9px;border-radius:50%;background:#6b7280;flex-shrink:0"></span>
+            <span id="home-map-client-name" style="font-family:'Fraunces',serif;font-size:13px;font-weight:700;color:#0f3320;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Seleccionar cliente ▾</span>
+            <span id="home-map-count" style="font-size:10px;color:#6b6560;flex-shrink:0"></span>
+          </div>
+
+          <!-- Risk filter pill -->
+          <div style="pointer-events:auto;position:relative;flex-shrink:0;margin-left:auto">
+            <button id="home-filter-btn" onclick="homeToggleRiskMenu(event)" style="height:36px;padding:0 12px;background:rgba(255,255,255,.97);border:none;border-radius:22px;font-size:11px;font-weight:700;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;white-space:nowrap;display:flex;align-items:center;gap:5px;color:#3d3830;box-shadow:0 4px 18px rgba(0,0,0,.22)">
+              <span id="home-filter-dot" style="width:9px;height:9px;border-radius:50%;background:#9ca3af;flex-shrink:0"></span>
+              <span id="home-filter-label">Riesgo ▾</span>
+            </button>
+            <!-- Risk dropdown -->
+            <div id="home-risk-menu" style="display:none;position:absolute;top:calc(100% + 6px);right:0;z-index:600;background:#fff;border:1.5px solid #e5e0d5;border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.18);overflow:hidden;min-width:145px">
+              <button onclick="homeSetRisk('');homeToggleRiskMenu()" style="width:100%;padding:11px 14px;background:none;border:none;text-align:left;font-size:13px;font-weight:700;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;display:flex;align-items:center;gap:8px;color:#3d3830"><span style="width:10px;height:10px;border-radius:50%;background:#9ca3af;flex-shrink:0"></span>Todos</button>
+              <button onclick="homeSetRisk('extremo');homeToggleRiskMenu()" style="width:100%;padding:11px 14px;background:none;border:none;text-align:left;font-size:13px;font-weight:700;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;display:flex;align-items:center;gap:8px;color:#3d3830;border-top:1px solid #f0ebe0"><span style="width:10px;height:10px;border-radius:50%;background:#dc2626;flex-shrink:0"></span>Extremo</button>
+              <button onclick="homeSetRisk('alto');homeToggleRiskMenu()" style="width:100%;padding:11px 14px;background:none;border:none;text-align:left;font-size:13px;font-weight:700;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;display:flex;align-items:center;gap:8px;color:#3d3830;border-top:1px solid #f0ebe0"><span style="width:10px;height:10px;border-radius:50%;background:#ea580c;flex-shrink:0"></span>Alto</button>
+              <button onclick="homeSetRisk('moderado');homeToggleRiskMenu()" style="width:100%;padding:11px 14px;background:none;border:none;text-align:left;font-size:13px;font-weight:700;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;display:flex;align-items:center;gap:8px;color:#3d3830;border-top:1px solid #f0ebe0"><span style="width:10px;height:10px;border-radius:50%;background:#ca8a04;flex-shrink:0"></span>Moderado</button>
+              <button onclick="homeSetRisk('bajo');homeToggleRiskMenu()" style="width:100%;padding:11px 14px;background:none;border:none;text-align:left;font-size:13px;font-weight:700;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;display:flex;align-items:center;gap:8px;color:#3d3830;border-top:1px solid #f0ebe0"><span style="width:10px;height:10px;border-radius:50%;background:#15803d;flex-shrink:0"></span>Bajo</button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ── BOTTOM OVERLAY: FABs + client info bar ── -->
+        <div style="position:absolute;bottom:8px;left:12px;right:12px;z-index:500;display:flex;flex-direction:column;gap:9px;pointer-events:none">
+
+          <!-- New tree + GPS row -->
+          <div style="display:flex;justify-content:space-between;align-items:center;pointer-events:none">
+            <button onclick="startNewTree()" style="pointer-events:auto;height:44px;padding:0 18px;border-radius:22px;background:#0f3320;color:#fff;border:none;box-shadow:0 4px 14px rgba(0,0,0,.3);font-size:13px;font-weight:800;cursor:pointer;display:flex;align-items:center;gap:7px;font-family:'IBM Plex Sans',sans-serif">
+              <span style="font-size:20px;line-height:1">+</span> Nuevo árbol
+            </button>
+            <button id="homeLocateBtn" onclick="homeGoToMyLocation()" style="pointer-events:auto;width:44px;height:44px;border-radius:50%;background:#fff;border:none;box-shadow:0 4px 14px rgba(0,0,0,.22);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:opacity .2s" title="Mi ubicación">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3.5"/>
+                <line x1="12" y1="2" x2="12" y2="6"/>
+                <line x1="12" y1="18" x2="12" y2="22"/>
+                <line x1="2" y1="12" x2="6" y2="12"/>
+                <line x1="18" y1="12" x2="22" y2="12"/>
+              </svg>
+            </button>
+          </div>
+
+          <!-- Client info floating bar -->
+          <div id="home-float-bar" style="pointer-events:auto;background:rgba(10,36,16,.93);backdrop-filter:blur(10px);border-radius:18px;padding:11px 14px;display:flex;align-items:center;gap:10px;box-shadow:0 4px 22px rgba(0,0,0,.32)">
+            <div id="home-float-dot" style="width:11px;height:11px;border-radius:50%;background:#6b7280;flex-shrink:0;box-shadow:0 0 0 3px rgba(107,114,128,.25)"></div>
+            <div style="flex:1;min-width:0">
+              <div id="panel-client-name" style="font-family:'Fraunces',serif;font-size:13px;font-weight:900;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Sin cliente seleccionado</div>
+              <div id="panel-client-stats" style="font-size:10px;color:#86efac;font-weight:600;margin-top:1px"></div>
+            </div>
+            <!-- Action icon buttons: 🔍 buscar todo | 📷 añadir foto al cliente | 📁 añadir archivo al cliente | ℹ️ info -->
+            <div style="display:flex;gap:6px;flex-shrink:0">
+              <button onclick="openHomeSearch()" title="Buscar árboles, fotos y datos del cliente" style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center">🔍</button>
+              <button onclick="homeAddClientPhoto()" title="Añadir foto al cliente" style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center">📷</button>
+              <button onclick="homeAddClientFile()" title="Añadir archivo al cliente" style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center">📁</button>
+              <button id="btn-client-info" onclick="openClientInfoSheet()" title="Info del cliente" style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center">ℹ️</button>
+            </div>
+            <!-- Hidden file inputs for client-level photo/file upload -->
+            <input type="file" id="clientPhotoInput" accept="image/*" capture="environment" style="display:none" onchange="homeClientPhotoSelected(this)">
+            <input type="file" id="clientFileInput" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,image/*" style="display:none" onchange="homeClientFileSelected(this)">
+          </div>
+
+        </div>
+
+        <!-- Empty state overlay -->
+        <div id="homeMapEmpty" style="display:none;position:absolute;inset:0;flex-direction:column;align-items:center;justify-content:center;background:rgba(244,241,235,.85);z-index:10;pointer-events:none">
+          <div style="font-size:48px;margin-bottom:12px">🌳</div>
+          <div style="font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:#0f3320;margin-bottom:4px">Sin árboles con GPS</div>
+          <div style="font-size:12px;color:#6b6560">Selecciona un cliente o agrega ubicación GPS a los árboles</div>
+        </div>
+
+      </div><!-- end homeMapWrap -->
+
+      <!-- Hidden stubs (JS compatibility) -->
+      <div id="homePanel" style="display:none">
+        <div id="panel-client-bar" style="display:none"></div>
+        <div id="home-tree-list" style="display:none"></div>
+        <div id="panel-files-body" style="display:none"></div>
+        <div id="panel-photos-grid" style="display:none"></div>
+        <div id="dashPanel" style="display:none"></div>
+        <input type="search" id="homeTreeSearch" style="display:none">
+      </div>
+      <div id="panelResizer" style="display:none"></div>
+
+    </div><!-- end viewHome -->
+
+    <!-- ── SEARCH SHEET (tree search from map) ── -->
+    <div class="modal-overlay" id="homeSearchSheet" style="z-index:2700">
+      <div class="modal-inner" style="border-radius:20px 20px 0 0;max-height:80vh;display:flex;flex-direction:column;overflow:hidden">
+        <div class="modal-drag"></div>
+        <div style="padding:12px 16px 8px;border-bottom:1px solid #e5e0d5;flex-shrink:0;display:flex;align-items:center;gap:10px">
+          <input type="search" id="homeSearchInput" placeholder="🔍 Árbol, especie, evaluador..." oninput="homeSearchFilter()" style="flex:1;padding:10px 14px;border:1.5px solid #d4cfc5;border-radius:12px;font-size:14px;font-family:'IBM Plex Sans',sans-serif;outline:none;background:#fafaf5">
+          <button onclick="closeHomeSearch()" style="width:32px;height:32px;border-radius:50%;border:1.5px solid #d4cfc5;background:#fff;font-size:14px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center">✕</button>
+        </div>
+        <div id="homeSearchList" style="flex:1;overflow-y:auto;padding:8px 12px 24px;-webkit-overflow-scrolling:touch">
+          <div style="padding:28px;text-align:center;color:#7a746e;font-size:13px;font-weight:600">Escribe para buscar árboles</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── QUICK NOTES SHEET ── -->
+    <div class="modal-overlay" id="homeNotesSheet" style="z-index:2700">
+      <div class="modal-inner" style="border-radius:20px 20px 0 0;padding:20px 16px 32px;display:flex;flex-direction:column;gap:12px">
+        <div class="modal-drag"></div>
+        <div style="font-family:'Fraunces',serif;font-size:16px;font-weight:900;color:#0f3320">📝 Nota rápida de campo</div>
+        <div style="font-size:11px;color:#7a746e" id="home-notes-target-label">Cliente: —</div>
+        <textarea id="homeNotesText" rows="5" placeholder="Escribe observaciones, condiciones del terreno, notas generales del sitio..." style="width:100%;box-sizing:border-box;padding:12px;border:1.5px solid #d4cfc5;border-radius:12px;font-size:14px;font-family:'IBM Plex Sans',sans-serif;color:#3d3830;background:#fafaf5;resize:vertical;outline:none;line-height:1.5"></textarea>
+        <div style="display:flex;gap:8px">
+          <button onclick="closeQuickNotes()" style="flex:1;padding:13px;background:#f4f1eb;color:#3d3830;border:none;border-radius:12px;font-weight:700;font-size:14px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif">Cancelar</button>
+          <button onclick="saveQuickNote()" style="flex:2;padding:13px;background:#0f3320;color:#fff;border:none;border-radius:12px;font-weight:700;font-size:14px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif">💾 Guardar nota</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── VIEW: MAPA GLOBAL (hidden, kept for backward compat) ─── -->
+    <div class="view" id="viewMap" style="display:none!important">
+      <div style="flex:1;position:relative;min-height:0">
+        <div id="leafletMap" style="position:absolute;inset:0"></div>
+        <div style="position:absolute;top:10px;left:10px;right:10px;z-index:500;background:rgba(255,255,255,.97);border-radius:12px;padding:12px 14px;box-shadow:0 8px 32px rgba(0,0,0,.15);border:1px solid #d4cfc5">
+          <div style="font-family:'Fraunces',serif;font-size:14px;font-weight:900;color:#0f3320">🌳 Arbolado Evaluado</div>
+          <div id="mapSubtitle" style="font-size:10px;color:#6b6560;margin-top:1px">Cargando datos...</div>
+          <div style="display:flex;gap:5px;margin-top:8px">
+            <select id="map-f-cliente" onchange="refreshMap()" style="flex:1;padding:5px;font-size:11px;border-radius:6px;border:1px solid #d4cfc5;outline:none;font-family:'IBM Plex Sans',sans-serif">
+              <option value="">Todos los clientes</option>
+            </select>
+            <select id="map-f-riesgo" onchange="refreshMap()" style="flex:1;padding:5px;font-size:11px;border-radius:6px;border:1px solid #d4cfc5;outline:none;font-family:'IBM Plex Sans',sans-serif">
+              <option value="">Todos los riesgos</option>
+              <option value="extremo">🔴 Extremo</option>
+              <option value="alto">🟠 Alto</option>
+              <option value="moderado">🟡 Moderado</option>
+              <option value="bajo">🟢 Bajo</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:4px;font-size:10px;font-weight:600"><div style="width:10px;height:10px;border-radius:50%;background:#15803d"></div>Bajo</div>
+            <div style="display:flex;align-items:center;gap:4px;font-size:10px;font-weight:600"><div style="width:10px;height:10px;border-radius:50%;background:#f59e0b"></div>Moderado</div>
+            <div style="display:flex;align-items:center;gap:4px;font-size:10px;font-weight:600"><div style="width:10px;height:10px;border-radius:50%;background:#f97316"></div>Alto</div>
+            <div style="display:flex;align-items:center;gap:4px;font-size:10px;font-weight:600"><div style="width:10px;height:10px;border-radius:50%;background:#b91c1c"></div>Extremo</div>
+          </div>
+        </div>
+        <button onclick="goToMyLocation()" style="position:absolute;bottom:20px;right:12px;z-index:500;width:44px;height:44px;border-radius:50%;background:#fff;border:2px solid rgba(0,0,0,.1);box-shadow:0 4px 12px rgba(0,0,0,.15);font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center">🎯</button>
+      </div>
+    </div><!-- end viewMap -->
+
+    <!-- ─── VIEW: REGISTROS ─── -->
+    <div class="view" id="viewDB">
+
+      <!-- Level 1: Clients -->
+      <div id="db-level-1" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden">
+        <div class="db-header" style="background:#fff;border-bottom:1px solid #d4cfc5;padding:12px 16px;flex-shrink:0">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
+            <div>
+              <div style="font-family:'Fraunces',serif;font-size:17px;font-weight:900;color:#0f3320">Mis Clientes</div>
+              <div id="lv1-count" style="font-size:10px;color:#6b6560;font-weight:600;margin-top:1px"></div>
+            </div>
+            <button onclick="startNewTree()" style="padding:8px 14px;background:#0f3320;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;white-space:nowrap">+ Nueva eval</button>
+          </div>
+          <input type="search" class="db-search" placeholder="🔍 Buscar cliente..." oninput="dbRenderLv1()" id="lv1-search">
+        </div>
+        <div class="db-scroll" id="db-lv1-list" style="flex:1;overflow-y:auto;padding:12px 14px 60px;display:flex;flex-direction:column;gap:10px;min-height:0;-webkit-overflow-scrolling:touch">
+          <div class="db-empty">🌱 Sin evaluaciones guardadas aún.</div>
+        </div>
+      </div>
+
+      <!-- Level 2: Trees of client -->
+      <div id="db-level-2" style="display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden">
+        <div class="db-header" style="background:#fff;border-bottom:1px solid #d4cfc5;padding:12px 16px;flex-shrink:0">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+            <button onclick="dbNav(1)" style="width:32px;height:32px;border-radius:50%;border:1.5px solid #d4cfc5;background:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">‹</button>
+            <div style="flex:1;min-width:0">
+              <div style="font-family:'Fraunces',serif;font-size:16px;font-weight:900;color:#0f3320;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="db-lv2-title">—</div>
+              <div id="lv2-stats" style="font-size:10px;color:#6b6560;font-weight:600;margin-top:1px"></div>
+            </div>
+            <div style="display:flex;gap:5px;flex-shrink:0">
+              <button onclick="dbLv2OpenClientFiles()" style="padding:5px 9px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:7px;font-weight:700;font-size:11px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif" title="Archivos del cliente">📁</button>
+              <button onclick="selectAllVisible()" style="padding:5px 9px;background:#dcfce7;color:#0f3320;border:1px solid #15803d;border-radius:7px;font-weight:700;font-size:11px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif" title="Seleccionar todos">☑️</button>
+              <button onclick="dbExportClientCSV()" style="padding:5px 9px;background:#f0fdf4;color:#15803d;border:1px solid #86efac;border-radius:7px;font-weight:700;font-size:11px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif" title="Exportar CSV">📊 CSV</button>
+              <button onclick="dbExportClientXLSX()" style="padding:5px 9px;background:#f0fdf4;color:#065f46;border:1px solid #6ee7b7;border-radius:7px;font-weight:700;font-size:11px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif" title="Exportar Excel">📗 XLS</button>
+              <button id="btnExportPDF" onclick="exportToPDF()" style="padding:5px 10px;background:#1d4ed8;color:#fff;border:none;border-radius:7px;font-weight:700;font-size:11px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif">📄 PDF(0)</button>
+            </div>
+          </div>
+          <input type="search" class="db-search" placeholder="🔍 Buscar árbol..." oninput="dbRenderLv2()" id="lv2-search" style="margin-bottom:8px">
+          <div class="risk-filter-row">
+            <button class="rf-chip active" data-r="" onclick="dbSetRisk(this,'')">Todos</button>
+            <button class="rf-chip" data-r="extremo" onclick="dbSetRisk(this,'extremo')">🔴 Extremo</button>
+            <button class="rf-chip" data-r="alto" onclick="dbSetRisk(this,'alto')">🟠 Alto</button>
+            <button class="rf-chip" data-r="moderado" onclick="dbSetRisk(this,'moderado')">🟡 Moderado</button>
+            <button class="rf-chip" data-r="bajo" onclick="dbSetRisk(this,'bajo')">🟢 Bajo</button>
+          </div>
+        </div>
+        <div class="db-scroll" id="db-lv2-list" style="flex:1;overflow-y:auto;padding:12px 14px 60px;display:flex;flex-direction:column;gap:10px;min-height:0;-webkit-overflow-scrolling:touch"></div>
+      </div>
+
+      <!-- Level 3: History of tree -->
+      <div id="db-level-3" style="display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden">
+        <div class="db-header" style="background:#fff;border-bottom:1px solid #d4cfc5;padding:12px 16px;flex-shrink:0">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+            <button onclick="dbNav(2)" style="width:32px;height:32px;border-radius:50%;border:1.5px solid #d4cfc5;background:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">‹</button>
+            <div style="flex:1;min-width:0">
+              <div style="font-family:'Fraunces',serif;font-size:16px;font-weight:900;color:#0f3320;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="db-lv3-title">—</div>
+              <div id="lv3-stats" style="font-size:10px;color:#6b6560;font-weight:600;margin-top:1px"></div>
+            </div>
+            <button onclick="dbStartReeval()" style="padding:8px 13px;background:#0f3320;color:#fff;border:none;border-radius:8px;font-weight:800;font-size:11px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;white-space:nowrap">↺ Re-eval</button>
+          </div>
+        </div>
+        <div class="db-scroll" id="db-lv3-list" style="flex:1;overflow-y:auto;padding:12px 14px 60px;min-height:0;-webkit-overflow-scrolling:touch"></div>
+      </div>
+
+    </div><!-- end viewDB -->
+
+    <!-- ─── VIEW: FORMULARIO ISA TRAQ ─── -->
+    <div class="view" id="viewForm">
+      <div style="background:#fff;border-bottom:1px solid #d4cfc5;padding:10px 14px;flex-shrink:0">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px">
+          <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0">
+            <button onclick="closeFormView()" style="width:30px;height:30px;border-radius:50%;border:1.5px solid #d4cfc5;background:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">‹</button>
+            <div id="progLabel" style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#166534;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">IDENTIFICACIÓN</div>
+          </div>
+          <div id="progCount" style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#6b6560;flex-shrink:0">0 / 0</div>
+        </div>
+        <div style="height:5px;background:#e5e0d5;border-radius:3px;overflow:hidden">
+          <div id="progFill" style="height:100%;background:linear-gradient(90deg,#166534,#22c55e);border-radius:3px;transition:width .5s ease;width:0%"></div>
+        </div>
+      </div>
+      <div id="formScroll" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;min-height:0;-webkit-overflow-scrolling:touch;scroll-behavior:smooth"></div>
+    </div>
+
+  </div><!-- end views-wrap -->
+
+  <!-- ═══ BOTTOM NAV ═══ -->
+  <nav id="mainNav" class="bottom-nav">
+    <button class="nav-tab active" id="tab-home" onclick="switchTab('home')">
+      <div class="nav-icon">🏠</div><div class="nav-label">Inicio</div>
+    </button>
+    <button class="nav-tab" id="tab-db" onclick="switchTab('db')">
+      <div class="nav-icon">🗂️</div><div class="nav-label">Registros</div>
+    </button>
+  </nav>
+
+</div><!-- end #app -->
+
+<!-- ═══ MODALS (outside #app so they overlay fully) ═══ -->
+
+<!-- Client Selector -->
+<div class="modal-overlay" id="clientSelectorModal">
+  <div class="modal-inner">
+    <div class="modal-drag"></div>
+    <div class="modal-head">
+      <div class="modal-title">Seleccionar Cliente</div>
+      <button class="modal-close" onclick="closeClientSelector()">✕</button>
+    </div>
+    <div style="padding:12px 18px 8px">
+      <input type="search" class="db-search" placeholder="🔍 Buscar cliente..." oninput="renderClientSelectorList()" id="cs-search">
+    </div>
+    <div id="cs-list" style="max-height:55vh;overflow-y:auto;padding:4px 18px 28px"></div>
+  </div>
+</div>
+
+<!-- Engineer Selector -->
+<div class="modal-overlay" id="engineerModal">
+  <div class="modal-inner">
+    <div class="modal-drag"></div>
+    <div class="modal-head">
+      <div class="modal-title">👤 Ingeniero Activo</div>
+      <button class="modal-close" onclick="closeEngineerModal()">✕</button>
+    </div>
+    <div style="padding:14px 18px 28px">
+      <div style="font-size:12px;font-weight:600;color:#6b6560;margin-bottom:10px">Selecciona tu nombre o escribe uno nuevo</div>
+      <div id="engineer-list" style="margin-bottom:12px;display:flex;flex-direction:column;gap:6px"></div>
+      <input type="text" id="engineer-inp" class="db-search" placeholder="Nombre completo del ingeniero..." style="margin-bottom:10px">
+      <button onclick="confirmEngineer()" style="width:100%;padding:12px;background:#0f3320;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif">Confirmar →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Map Picker (satellite GPS) -->
+<div class="modal-overlay" id="mapPickerModal" style="z-index:3000">
+  <div class="modal-inner" style="height:80vh;display:flex;flex-direction:column">
+    <div class="modal-head">
+      <div class="modal-title">📍 Seleccionar Ubicación</div>
+      <button class="modal-close" onclick="closeMapPicker()">✕</button>
+    </div>
+    <div style="flex:1;position:relative;background:#e5e5e5;min-height:0">
+      <div id="pickerMap" style="width:100%;height:100%"></div>
+      <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-100%);z-index:1000;pointer-events:none;font-size:32px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.3))">📍</div>
+    </div>
+    <div style="padding:14px;background:#fff;flex-shrink:0">
+      <button onclick="confirmMapPicker()" style="width:100%;padding:14px;background:#1d4ed8;color:#fff;border:3px solid #1d4ed8;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:8px">
+        ✅ Confirmar Ubicación Exacta
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Map Tree Action Sheet -->
+<div class="modal-overlay" id="mapActionSheet" style="z-index:2600">
+  <div class="modal-inner" style="border-radius:20px 20px 0 0;max-height:88vh;display:flex;flex-direction:column;overflow:hidden">
+    <div class="modal-drag"></div>
+    <!-- Tree header -->
+    <div style="padding:14px 16px 10px;border-bottom:1px solid #e5e0d5;flex-shrink:0">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:2px">
+        <div id="mas-risk-dot" style="width:14px;height:14px;border-radius:50%;background:#6b7280;flex-shrink:0;box-shadow:0 0 0 3px rgba(107,114,128,0.2)"></div>
+        <div id="mas-title" style="font-family:'Fraunces',serif;font-size:18px;font-weight:900;color:#0f3320;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">—</div>
+        <button onclick="closeMapActionSheet()" style="width:30px;height:30px;border-radius:50%;border:1.5px solid #d4cfc5;background:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">✕</button>
+      </div>
+      <div id="mas-meta" style="font-size:12px;color:#6b6560;padding-left:26px;line-height:1.5">—</div>
+    </div>
+    <!-- Inline photo strip -->
+    <div id="mas-photos-wrap" style="padding:10px 16px 6px;border-bottom:1px solid #f0ebe0;flex-shrink:0;display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <span style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#7a746e">Fotos (<span id="mas-photo-count">0</span>)</span>
+      </div>
+      <div id="mas-photos-strip" style="display:flex;gap:7px;overflow-x:auto;padding-bottom:4px"></div>
+    </div>
+    <!-- Scrollable actions -->
+    <div style="padding:12px 16px 28px;display:flex;flex-direction:column;gap:8px;overflow-y:auto">
+      <button id="mas-btn-detail" onclick="masOpenDetail()" style="width:100%;padding:14px 16px;background:#f0fdf4;color:#166534;border:1.5px solid #86efac;border-radius:12px;font-weight:700;font-size:14px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;text-align:left;display:flex;align-items:center;gap:10px">
+        <span style="font-size:18px">📋</span><span>Ver detalle completo</span><span style="margin-left:auto;font-size:16px;color:#86efac">›</span>
+      </button>
+      <div style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#7a746e;padding-top:4px">Fotos</div>
+      <div style="display:flex;gap:8px">
+        <button id="mas-btn-photo" onclick="masAddPhoto('camera')" style="flex:1;padding:13px 10px;background:#fff;color:#0f3320;border:1.5px solid #d4cfc5;border-radius:12px;font-weight:600;font-size:13px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:8px">
+          <span style="font-size:18px">📷</span><span>Cámara</span>
+        </button>
+        <button onclick="masAddPhoto('gallery')" style="flex:1;padding:13px 10px;background:#eff6ff;color:#1d4ed8;border:1.5px solid #bfdbfe;border-radius:12px;font-weight:600;font-size:13px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:8px">
+          <span style="font-size:18px">🖼️</span><span>Galería</span>
+        </button>
+      </div>
+      <!-- Notas de campo -->
+      <div style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#7a746e;padding-top:4px">Notas de campo</div>
+      <div style="background:#fafaf5;border:1.5px solid #d4cfc5;border-radius:12px;padding:10px 12px">
+        <textarea id="mas-notas" rows="3" placeholder="Observaciones, estado del árbol, notas de terreno..." style="width:100%;box-sizing:border-box;background:transparent;border:none;outline:none;font-size:13px;font-family:'IBM Plex Sans',sans-serif;color:#3d3830;resize:vertical;line-height:1.5"></textarea>
+        <div style="display:flex;justify-content:flex-end;margin-top:4px">
+          <button onclick="masSaveNotes()" style="padding:6px 14px;background:#0f3320;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'IBM Plex Sans',sans-serif">Guardar nota</button>
+        </div>
+      </div>
+      <div style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#7a746e;padding-top:4px">Documentos &amp; Acciones</div>
+      <button id="mas-btn-doc" onclick="masAddDoc()" style="width:100%;padding:13px 16px;background:#fff;color:#0f3320;border:1.5px solid #d4cfc5;border-radius:12px;font-weight:600;font-size:14px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;text-align:left;display:flex;align-items:center;gap:10px">
+        <span style="font-size:18px">📄</span><span>Añadir documento</span>
+      </button>
+      <button id="mas-btn-isa" onclick="masNewISA()" style="width:100%;padding:14px 16px;background:#0f3320;color:#fff;border:none;border-radius:12px;font-weight:700;font-size:14px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;text-align:left;display:flex;align-items:center;gap:10px">
+        <span style="font-size:18px">📊</span><span>Nueva evaluación ISA TRAQ</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Tree Detail Modal -->
+<div class="modal-overlay" id="detailModal">
+  <div class="modal-inner">
+    <div class="modal-drag"></div>
+    <div class="modal-head">
+      <div class="modal-title" id="modalTitle">Detalle del Árbol</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<!-- Client Info Sheet -->
+<div class="modal-overlay" id="clientInfoSheet" style="z-index:2500">
+  <div class="modal-inner" style="border-radius:20px 20px 0 0;max-height:92vh;display:flex;flex-direction:column;overflow:hidden">
+    <div class="modal-drag"></div>
+    <div style="padding:14px 16px 10px;border-bottom:1px solid #e5e0d5;flex-shrink:0;display:flex;align-items:center;gap:10px">
+      <div id="cis-dot" style="width:12px;height:12px;border-radius:50%;background:#22c55e;flex-shrink:0"></div>
+      <div id="cis-name" style="font-family:'Fraunces',serif;font-size:18px;font-weight:900;color:#0f3320;flex:1">Cliente</div>
+      <button onclick="closeClientInfoSheet()" style="width:30px;height:30px;border-radius:50%;border:1.5px solid #d4cfc5;background:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">✕</button>
+    </div>
+    <div id="cis-body" style="flex:1;overflow-y:auto;padding:14px 16px 28px"></div>
+  </div>
+</div>
+
+<!-- Documents Modal -->
+<div class="modal-overlay" id="docsModal">
+  <div class="modal-inner">
+    <div class="modal-drag"></div>
+    <div class="modal-head">
+      <div class="modal-title" id="docs-modal-title">📁 Archivos del Cliente</div>
+      <button class="modal-close" onclick="closeDocsModal()">✕</button>
+    </div>
+    <div style="display:flex;gap:6px;padding:8px 16px 0;flex-shrink:0">
+      <button onclick="dbExportDocsXLSX()" style="flex:1;padding:8px;background:#f0fdf4;color:#065f46;border:1px solid #6ee7b7;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif">📗 Exportar Excel</button>
+      <button onclick="dbExportDocsPDF()" style="flex:1;padding:8px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif">📄 Exportar PDF</button>
+    </div>
+    <div style="padding:14px 18px 28px" id="docs-modal-list"></div>
+  </div>
+</div>
+
+<!-- ═══ TREE WIZARD MODAL ═══ -->
+<div class="modal-overlay" id="treeWizardModal" style="z-index:2800">
+  <div class="modal-inner" style="max-height:92vh;display:flex;flex-direction:column;overflow:hidden">
+    <div class="modal-drag"></div>
+
+    <!-- Header -->
+    <div style="padding:14px 16px 10px;background:#0f3320;border-radius:20px 20px 0 0;flex-shrink:0">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-family:'Fraunces',serif;font-size:18px;font-weight:900;color:#fff">➕ Nuevo Árbol</div>
+        <button onclick="closeTreeWizard()" style="width:30px;height:30px;border-radius:50%;border:1.5px solid rgba(255,255,255,.3);background:rgba(255,255,255,.1);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
+      </div>
+      <!-- Step pills -->
+      <div style="display:flex;gap:6px;margin-top:10px" id="wiz-steps">
+        <div class="wiz-step active" data-step="1" style="flex:1;height:4px;border-radius:2px;background:#22c55e;transition:background .3s"></div>
+        <div class="wiz-step" data-step="2" style="flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,.25);transition:background .3s"></div>
+        <div class="wiz-step" data-step="3" style="flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,.25);transition:background .3s"></div>
+      </div>
+      <div id="wiz-step-label" style="font-size:10px;color:#86efac;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-top:6px">Paso 1 · Identificación</div>
+    </div>
+
+    <!-- Body (scrollable) -->
+    <div style="flex:1;overflow-y:auto;min-height:0;-webkit-overflow-scrolling:touch">
+
+      <!-- STEP 1: Identificación -->
+      <div id="wiz-panel-1" style="padding:16px">
+        <div style="font-size:13px;color:#6b6560;margin-bottom:14px">Completa la información básica del árbol antes de la evaluación ISA TRAQ.</div>
+
+        <label style="display:block;font-size:11px;font-weight:700;color:#0f3320;letter-spacing:1px;text-transform:uppercase;margin-bottom:5px">ID del Árbol *</label>
+        <input id="wiz-arbolId" type="text" placeholder="Ej: T-104, A-007..." class="db-search" style="margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;font-family:'IBM Plex Mono',monospace;font-size:14px">
+
+        <label style="display:block;font-size:11px;font-weight:700;color:#0f3320;letter-spacing:1px;text-transform:uppercase;margin-bottom:5px">Especie</label>
+        <input id="wiz-especie" type="text" placeholder="Ej: Eucalyptus globulus..." class="db-search" list="especie-datalist" style="margin-bottom:12px">
+
+        <label style="display:block;font-size:11px;font-weight:700;color:#0f3320;letter-spacing:1px;text-transform:uppercase;margin-bottom:5px">Cliente</label>
+        <input id="wiz-cliente" type="text" placeholder="Nombre del cliente..." class="db-search" list="client-datalist" style="margin-bottom:12px">
+
+        <!-- Evaluador: auto from logged-in account, shown read-only -->
+        <label style="display:block;font-size:11px;font-weight:700;color:#0f3320;letter-spacing:1px;text-transform:uppercase;margin-bottom:5px">Evaluador</label>
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;margin-bottom:4px">
+          <span style="font-size:15px">👤</span>
+          <span id="wiz-evaluador-display" style="font-weight:700;color:#166534;font-size:13px;flex:1">—</span>
+          <span style="font-size:10px;color:#6b9e7a;font-weight:600;letter-spacing:.5px;text-transform:uppercase">Cuenta activa</span>
+        </div>
+        <input id="wiz-evaluador" type="hidden">
+      </div>
+
+      <!-- STEP 2: Ubicación GPS + Clima -->
+      <div id="wiz-panel-2" style="padding:16px;display:none">
+
+        <!-- Status: loading / confirmed -->
+        <div id="wiz-loc-loading" style="display:none;text-align:center;padding:20px 0">
+          <div style="font-size:32px;margin-bottom:8px">📡</div>
+          <div style="font-size:13px;font-weight:700;color:#0f3320" id="wiz-loc-loading-txt">Obteniendo tu ubicación...</div>
+          <div style="font-size:11px;color:#9c9690;margin-top:4px">Mantén el dispositivo al aire libre</div>
+        </div>
+
+        <!-- GPS confirmed display -->
+        <div id="wiz-gps-display" style="display:none;background:#f0fdf4;border:1.5px solid #86efac;border-radius:12px;padding:12px 14px;margin-bottom:12px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <span style="font-size:18px">📍</span>
+            <span style="font-size:11px;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:.5px">Ubicación confirmada</span>
+          </div>
+          <div id="wiz-gps-text" style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#166534;margin-bottom:8px">—</div>
+          <button onclick="wizOpenMapPicker()" style="width:100%;padding:10px;background:#0f3320;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif">
+            🗺️ Ajustar en el mapa
+          </button>
+        </div>
+
+        <!-- No GPS yet — primary action -->
+        <div id="wiz-gps-actions" style="">
+          <button onclick="wizAutoGPSAndMap()" style="width:100%;padding:16px;background:#0f3320;color:#fff;border:none;border-radius:12px;font-weight:800;font-size:15px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:10px">
+            <span style="font-size:22px">🎯</span> Usar GPS y seleccionar en mapa
+          </button>
+          <div style="font-size:11px;color:#9c9690;text-align:center">Se abrirá el mapa centrado en tu ubicación para precisar el punto exacto del árbol</div>
+        </div>
+
+        <!-- Weather card — shown after GPS confirmed -->
+        <div id="wiz-weather-card" style="display:none;margin-top:14px;background:#fff;border:1.5px solid #d4cfc5;border-radius:12px;overflow:hidden">
+          <div style="background:#1d4ed8;padding:10px 14px;display:flex;align-items:center;gap:8px">
+            <span style="font-size:18px" id="wiz-wx-icon">🌤️</span>
+            <span style="font-size:12px;font-weight:700;color:#fff">Condiciones Meteorológicas</span>
+            <span style="font-size:10px;color:rgba(255,255,255,.7);margin-left:auto" id="wiz-wx-time"></span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
+            <div style="padding:10px 14px;border-right:1px solid #e5e0d5;border-bottom:1px solid #e5e0d5">
+              <div style="font-size:10px;color:#6b6560;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Temperatura</div>
+              <div style="font-size:20px;font-weight:800;color:#0f3320;margin-top:2px" id="wiz-wx-temp">—</div>
+            </div>
+            <div style="padding:10px 14px;border-bottom:1px solid #e5e0d5">
+              <div style="font-size:10px;color:#6b6560;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Humedad</div>
+              <div style="font-size:20px;font-weight:800;color:#0f3320;margin-top:2px" id="wiz-wx-hum">—</div>
+            </div>
+            <div style="padding:10px 14px;border-right:1px solid #e5e0d5">
+              <div style="font-size:10px;color:#6b6560;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Viento</div>
+              <div style="font-size:20px;font-weight:800;color:#0f3320;margin-top:2px" id="wiz-wx-wind">—</div>
+            </div>
+            <div style="padding:10px 14px">
+              <div style="font-size:10px;color:#6b6560;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Dirección</div>
+              <div style="font-size:20px;font-weight:800;color:#0f3320;margin-top:2px" id="wiz-wx-dir">—</div>
+            </div>
+          </div>
+          <div style="padding:8px 14px;background:#f4f1eb;font-size:10px;color:#6b6560">✅ Datos guardados automáticamente en la evaluación</div>
+        </div>
+
+        <div id="wiz-weather-loading" style="display:none;margin-top:14px;text-align:center;padding:12px;font-size:12px;color:#6b6560">
+          ⏳ Cargando datos del clima...
+        </div>
+
+      </div>
+
+      <!-- STEP 3: Fotos y documentos -->
+      <div id="wiz-panel-3" style="padding:16px;display:none">
+        <div style="font-size:13px;color:#6b6560;margin-bottom:14px">Agrega fotos y documentos antes de comenzar el formulario ISA TRAQ.</div>
+
+        <!-- Fotos -->
+        <div style="font-size:11px;font-weight:700;color:#0f3320;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">📷 Fotos del árbol</div>
+        <div id="wiz-photos-preview" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;min-height:40px"></div>
+        <div style="display:flex;gap:8px;margin-bottom:16px">
+          <button onclick="wizAddPhoto('camera')" style="flex:1;padding:12px;background:#f0fdf4;color:#166534;border:2px dashed #86efac;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:6px">
+            📷 Cámara
+          </button>
+          <button onclick="wizAddPhoto('gallery')" style="flex:1;padding:12px;background:#f0f9ff;color:#1d4ed8;border:2px dashed #93c5fd;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:6px">
+            🖼️ Galería
+          </button>
+        </div>
+
+        <!-- Documentos -->
+        <div style="font-size:11px;font-weight:700;color:#0f3320;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">📁 Documentos</div>
+        <div id="wiz-docs-preview" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px"></div>
+        <button onclick="wizAddDoc()" style="width:100%;padding:12px;background:#fafaf0;color:#92400e;border:2px dashed #d97706;border-radius:10px;font-weight:600;font-size:13px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;margin-bottom:4px">
+          📄 Añadir documento
+        </button>
+
+        <!-- Notas de campo -->
+        <div style="margin-top:16px">
+          <div style="font-size:11px;font-weight:700;color:#0f3320;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">📝 Notas de campo</div>
+          <textarea id="wiz-notas" placeholder="Observaciones, notas de terreno, estado general del árbol..." rows="3" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #d4cfc5;border-radius:10px;font-size:13px;font-family:'IBM Plex Sans',sans-serif;color:#3d3830;background:#fafaf8;resize:vertical;outline:none"></textarea>
+        </div>
+
+        <div style="margin-top:10px;font-size:11px;color:#9c9690;text-align:center">Puedes agregar más fotos y documentos después desde el detalle del árbol</div>
+      </div>
+
+    </div><!-- end scrollable body -->
+
+    <!-- Footer buttons -->
+    <div style="padding:12px 16px 16px;background:#fff;border-top:1px solid #e5e0d5;flex-shrink:0;display:flex;flex-direction:column;gap:8px">
+      <div id="wiz-save-basic-row" style="display:none">
+        <button onclick="wizShowManualRisk()" style="width:100%;padding:12px;background:#065f46;color:#fff;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif">🎯 Seleccionar riesgo de forma manual</button>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button id="wiz-btn-back" onclick="wizPrev()" style="flex:1;padding:13px;background:#f4f1eb;color:#3d3830;border:none;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;display:none">← Atrás</button>
+        <button id="wiz-btn-next" onclick="wizNext()" style="flex:2;padding:13px;background:#0f3320;color:#fff;border:none;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif">Siguiente →</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Photo Fullscreen -->
+<div class="modal-overlay" id="photoModal" style="background:rgba(0,0,0,.92);z-index:2000" onclick="closePhotoModal()">
+  <div style="width:100%;max-height:90vh;display:flex;align-items:center;justify-content:center;padding:20px">
+    <img id="photoModalImg" src="" style="max-width:100%;max-height:80vh;border-radius:10px;object-fit:contain">
+  </div>
+</div>
+
+<!-- Complete Screen (full-screen overlay) -->
+<div class="complete-screen" id="completeScreen">
+  <div style="padding:16px 16px 8px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:nowrap;flex-shrink:0">
+    <div style="min-width:0">
+      <div style="font-family:'Fraunces',serif;font-size:22px;font-weight:900;color:#fff;line-height:1.1">Evaluación<br>Completada</div>
+      <div style="font-size:11px;color:#86efac;margin-top:3px;font-weight:600;letter-spacing:1px;text-transform:uppercase">Informe · Bosques Urbanos v6.0</div>
+    </div>
+    <button onclick="closeComplete()" style="padding:8px 14px;border:1.5px solid rgba(255,255,255,.25);border-radius:8px;background:rgba(255,255,255,.1);color:#fff;font-weight:700;font-size:11px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;white-space:nowrap;flex-shrink:0;align-self:center">✕ Cerrar</button>
+  </div>
+  <div id="csBody" style="padding:0 16px 40px;flex:1;overflow-y:auto"></div>
+</div>
+
+<!-- Toast Notification -->
+<div class="notif" id="notif" style="position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-100px);background:#0f3320;color:#fff;border-radius:10px;padding:11px 18px;font-size:13px;font-weight:600;z-index:3000;transition:transform .3s cubic-bezier(0.16,1,0.3,1);display:flex;align-items:center;gap:7px;box-shadow:0 8px 32px rgba(0,0,0,.15);max-width:90vw;pointer-events:none">✅ Listo</div>
+
+<!-- Hidden file inputs -->
+<input type="file" id="photo-input" accept="image/*" capture="environment" style="display:none" onchange="window._handlePhotoInput(this)">
+<input type="file" id="photo-input-gallery" accept="image/*" style="display:none" onchange="window._handlePhotoInput(this)">
+<input type="file" id="file-upload-input" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,image/*" style="display:none" onchange="window._handleFileInput(this)">
+
+<!-- Autocomplete datalists -->
+<datalist id="client-datalist"></datalist>
+<datalist id="especie-datalist"></datalist>
+<datalist id="evaluador-datalist"></datalist>
+
+<!-- ═══ FIREBASE SDK (ES Module) ═══ -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, push, onValue, remove, update, get, set } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBC5fz0bq_L1woj4Q3vSuCHKL3CswzLhxw",
+  authDomain: "appp-1ed52.firebaseapp.com",
+  databaseURL: "https://appp-1ed52-default-rtdb.firebaseio.com",
+  projectId: "appp-1ed52",
+  storageBucket: "appp-1ed52.firebasestorage.app",
+  messagingSenderId: "377421785269",
+  appId: "1:377421785269:web:48088a6486262e237576fc"
+};
+const app = initializeApp(firebaseConfig);
+
+const db      = getDatabase(app);
+const storage = getStorage(app);
+
+const evalsRef    = ref(db, 'evaluaciones');
+const clientesRef = ref(db, 'clientes');
+const usuariosRef = ref(db, 'usuarios');
+
+// ── Evaluaciones ──
+window._fbPush       = d    => push(evalsRef, d);
+window._fbRemove     = key  => remove(ref(db, 'evaluaciones/' + key));
+window._fbUpdateEval = (key, u) => update(ref(db, 'evaluaciones/' + key), u);
+window._fbOnValue    = cb   => onValue(evalsRef, cb);
+
+// ── Clientes ──
+window._fbPushCliente   = d   => push(clientesRef, d);
+window._fbUpdateCliente = (key, u) => update(ref(db, 'clientes/' + key), u);
+window._fbRemoveCliente = key => remove(ref(db, 'clientes/' + key));
+window._fbOnClientes    = cb  => onValue(clientesRef, cb);
+
+// ── Usuarios (custom auth via DB) ──
+window._fbGetAllUsers = () => get(usuariosRef).then(s => s.val() || {});
+window._fbHasUsers    = () => get(usuariosRef).then(s => s.exists());
+window._fbSaveUser    = (uid, data) => update(ref(db, 'usuarios/' + uid), data);
+window._fbUpdateUser  = (uid, data) => update(ref(db, 'usuarios/' + uid), data);
+window._fbRemoveUser  = (uid)       => remove(ref(db, 'usuarios/' + uid));
+
+// ── App config (cloudinary, etc.) stored in /config/ ──
+window._fbSetConfig    = (key, val) => set(ref(db, 'config/' + key), val);
+window._fbGetConfig    = (key)      => get(ref(db, 'config/' + key)).then(s => s.exists() ? s.val() : null);
+window._FIREBASE_DB_URL = firebaseConfig.databaseURL || '';
+
+// Load Cloudinary config on boot (if saved previously by admin)
+(async function() {
+  try {
+    var cfg = await window._fbGetConfig('cloudinary');
+    if (cfg && cfg.cloudName && cfg.uploadPreset) {
+      window.CLOUDINARY_CLOUD_NAME    = cfg.cloudName;
+      window.CLOUDINARY_UPLOAD_PRESET = cfg.uploadPreset;
+    }
+  } catch(e) { /* offline — use defaults */ }
+})();
+
+// ── Archivos (docs per client or tree) ──
+const _fsKey = s => (s||'sin_cliente').replace(/[.#$[\]/]/g,'_');
+window._fsKey           = _fsKey;
+window._fbPushArchivo   = (clienteId, data) => push(ref(db, 'archivos/' + _fsKey(clienteId)), data);
+window._fbRemoveArchivo = (clienteId, key)  => remove(ref(db, 'archivos/' + _fsKey(clienteId) + '/' + key));
+window._fbOnArchivos    = cb => onValue(ref(db, 'archivos'), cb);
+window._fbOnArchivosCliente = (clienteId, cb) => onValue(ref(db, 'archivos/' + _fsKey(clienteId)), cb);
+
+// ── Dev Console — generic path helpers ──
+window._fbReadPath   = (path, cb) => onValue(ref(db, path), cb, { onlyOnce: true });
+window._fbSetPath    = (path, val) => set(ref(db, path), val);
+window._fbDeletePath = (path)     => remove(ref(db, path));
+
+// ── Image compression — canvas resize to ≤1200px, JPEG 0.72 ──
+window._compressImage = function(file, maxPx, quality) {
+  maxPx = maxPx || 1200; quality = quality || 0.72;
+  return new Promise(function(resolve, reject) {
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onload = function() {
+      URL.revokeObjectURL(url);
+      var w = img.width, h = img.height;
+      if (w > maxPx || h > maxPx) {
+        if (w > h) { h = Math.round(h * maxPx / w); w = maxPx; }
+        else       { w = Math.round(w * maxPx / h); h = maxPx; }
+      }
+      var canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = function() { URL.revokeObjectURL(url); reject(new Error('No se pudo leer la imagen')); };
+    img.src = url;
+  });
+};
+
+// ── Storage — Photos (Firebase Storage → compressed base64 fallback) ──
+window._fbUploadPhoto = async function(clienteId, arbolId, file) {
+  // Try Firebase Storage first
+  try {
+    const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = 'fotos/' + (clienteId||'sin_cliente') + '/' + (arbolId||'sin_id') + '/' + Date.now() + '_' + safe;
+    const snap = await uploadBytes(sRef(storage, path), file);
+    return { url: await getDownloadURL(snap.ref), path, type: 'storage' };
+  } catch(e) {
+    console.warn('Firebase Storage no disponible, usando base64 comprimido:', e.message);
+  }
+  // Fallback: compress image and store as base64
+  const isImage = file.type.startsWith('image/');
+  if (isImage) {
+    const dataUrl = await window._compressImage(file, 1200, 0.72);
+    return { url: dataUrl, type: 'base64' };
+  }
+  // Non-image: read raw base64 (limit 3MB)
+  return new Promise(function(resolve, reject) {
+    if (file.size > 3 * 1024 * 1024) { reject(new Error('Archivo muy grande (máx 3MB sin Storage)')); return; }
+    var reader = new FileReader();
+    reader.onload = function(e) { resolve({ url: e.target.result, type: 'base64' }); };
+    reader.onerror = function() { reject(new Error('Error leyendo archivo')); };
+    reader.readAsDataURL(file);
+  });
+};
+
+// ── Storage — Docs (Firebase Storage → base64 fallback) ──
+window._fbUploadDoc = async function(clienteId, file) {
+  // Try Firebase Storage first
+  try {
+    const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = 'documentos/' + (clienteId||'sin_cliente') + '/' + Date.now() + '_' + safe;
+    const snap = await uploadBytes(sRef(storage, path), file);
+    return { url: await getDownloadURL(snap.ref), path, name: file.name, type: 'storage', ts: Date.now() };
+  } catch(e) {
+    console.warn('Firebase Storage no disponible, usando base64:', e.message);
+  }
+  // Fallback: base64 inline (images get compressed, docs limited to 5MB)
+  const isImage = file.type.startsWith('image/');
+  if (isImage) {
+    const dataUrl = await window._compressImage(file, 1200, 0.72);
+    return { url: dataUrl, name: file.name, type: 'base64', ts: Date.now() };
+  }
+  return new Promise(function(resolve, reject) {
+    if (file.size > 5 * 1024 * 1024) { reject(new Error('Documento muy grande (máx 5MB). Activa Firebase Storage para archivos mayores.')); return; }
+    var reader = new FileReader();
+    reader.onload = function(e) { resolve({ url: e.target.result, name: file.name, type: 'base64', ts: Date.now() }); };
+    reader.onerror = function() { reject(new Error('Error leyendo archivo')); };
+    reader.readAsDataURL(file);
+  });
+};
+
+// ── Offline/online indicator ──
+const dot = document.getElementById('connDot');
+window.addEventListener('offline', () => { if(dot){dot.classList.add('off');dot.title='Sin conexión';}});
+window.addEventListener('online',  () => { if(dot){dot.classList.remove('off');dot.title='Conectado';}});
+
+// ── Data listeners (started after custom auth confirms session) ──
+let _listenersStarted = false;
+window._startDataListeners = function() {
+  if (_listenersStarted) return;
+  _listenersStarted = true;
+  window._fbOnValue(snap => {
+    window._fbRawAll = snap.val() || {};
+    if (window._applyDBFilter)      window._applyDBFilter();
+    if (window.populateClientList)  window.populateClientList();
+    if (window.updateFilters)       window.updateFilters();
+    if (window.refreshMap)          window.refreshMap();
+    if (window.refreshHomeMap)      window.refreshHomeMap();
+    if (window.renderDashboard)     window.renderDashboard();
+    if (dot) { dot.classList.remove('off'); dot.title = 'Conectado'; }
+  });
+  if (window._fbOnClientes) window._fbOnClientes(snap => {
+    window._clientesAll = snap.val() || {};
+    if (window.renderClientSelectorList) window.renderClientSelectorList();
+  });
+  if (window._fbOnArchivos) window._fbOnArchivos(snap => {
+    window._archivosAll = snap.val() || {};
+    if (window.renderPanelFiles) window.renderPanelFiles();
+  });
+};
+
+// ── Boot: check localStorage session after scripts load ──
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    if (window._bootAuth) window._bootAuth();
+  }, 100);
+});
+</script>
+
+<!-- SheetJS (Excel export) -->
+<script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+
+<!-- Cloudinary config — set your own cloud name + unsigned upload preset here -->
+<script>
+window.CLOUDINARY_CLOUD_NAME   = '';  // e.g. 'bosques-urbanos'
+window.CLOUDINARY_UPLOAD_PRESET = ''; // e.g. 'bosques_preset'
+</script>
+
+<!-- App JS (order: config → state → auth → firebase wrapper → form → records → clients → dashboard → maps → admin → app) -->
+<script src="js/config.js"></script>
+<script src="js/state.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/firebase.js"></script>
+<script src="js/form.js"></script>
+<script src="js/records.js"></script>
+<script src="js/clients.js"></script>
+<script src="js/dashboard.js"></script>
+<script src="js/map-home.js"></script>
+<script src="js/map-global.js"></script>
+<script src="js/admin.js"></script>
+<script src="js/app.js"></script>
+
+<!-- ═══ DEV CONSOLE MODAL (programador only) ═══ -->
+<div id="devConsoleModal" style="display:none;position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,.92);flex-direction:column;font-family:'IBM Plex Mono',monospace">
+  <!-- Top bar -->
+  <div style="background:#0d0d0d;border-bottom:1px solid #1f2937;padding:10px 16px;display:flex;align-items:center;gap:12px;flex-shrink:0">
+    <span style="font-size:14px;font-weight:700;color:#4ade80">🖥️ Bosques Urbanos · Dev Console</span>
+    <span style="font-size:10px;color:#4b5563;flex:1">acceso total · solo programador</span>
+    <!-- Path bar -->
+    <input id="devPathInput" type="text" value="/" placeholder="/ruta/firebase" style="flex:1;background:#111;border:1px solid #374151;border-radius:6px;padding:5px 10px;color:#d1fae5;font-family:'IBM Plex Mono',monospace;font-size:12px;outline:none">
+    <button onclick="devLoad()" style="padding:5px 12px;background:#065f46;color:#6ee7b7;border:none;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer;font-family:'IBM Plex Mono',monospace">Cargar</button>
+    <button onclick="closeDevConsole()" style="padding:5px 12px;background:#1f2937;color:#9ca3af;border:none;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer">✕ Cerrar</button>
+  </div>
+  <!-- Tab bar -->
+  <div style="background:#111;border-bottom:1px solid #1f2937;padding:0 16px;display:flex;gap:0;flex-shrink:0" id="devTabBar">
+    <button onclick="devSetTab('eval')"     class="dev-tab active" data-tab="eval">📋 /evaluaciones</button>
+    <button onclick="devSetTab('clientes')" class="dev-tab" data-tab="clientes">🏢 /clientes</button>
+    <button onclick="devSetTab('archivos')" class="dev-tab" data-tab="archivos">📁 /archivos</button>
+    <button onclick="devSetTab('usuarios')" class="dev-tab" data-tab="usuarios">👥 /usuarios</button>
+    <button onclick="devSetTab('custom')"   class="dev-tab" data-tab="custom">🔍 Personalizado</button>
+  </div>
+  <!-- Toolbar -->
+  <div style="background:#0d0d0d;border-bottom:1px solid #1f2937;padding:6px 16px;display:flex;gap:8px;align-items:center;flex-shrink:0">
+    <button onclick="devRefresh()" style="padding:4px 12px;background:#1f2937;color:#6ee7b7;border:1px solid #374151;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'IBM Plex Mono',monospace">↺ Refrescar</button>
+    <button onclick="devExpandAll()" style="padding:4px 12px;background:#1f2937;color:#93c5fd;border:1px solid #374151;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'IBM Plex Mono',monospace">+ Expandir todo</button>
+    <button onclick="devCollapseAll()" style="padding:4px 12px;background:#1f2937;color:#9ca3af;border:1px solid #374151;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'IBM Plex Mono',monospace">- Colapsar todo</button>
+    <button onclick="devExportRaw()" style="padding:4px 12px;background:#1f2937;color:#fbbf24;border:1px solid #374151;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'IBM Plex Mono',monospace">⬇ JSON</button>
+    <span id="devStatus" style="font-size:10px;color:#4b5563;margin-left:4px"></span>
+  </div>
+  <!-- Main area: tree + editor side by side -->
+  <div style="display:flex;flex:1;min-height:0;overflow:hidden">
+    <!-- JSON tree -->
+    <div id="devTree" style="flex:1;overflow-y:auto;padding:12px 16px;font-size:11px;line-height:1.7;color:#d1fae5;background:#0a0a0a;min-width:0"></div>
+    <!-- Editor panel -->
+    <div id="devEditor" style="width:340px;border-left:1px solid #1f2937;background:#0d0d0d;display:flex;flex-direction:column;flex-shrink:0">
+      <div style="padding:10px 14px;border-bottom:1px solid #1f2937;font-size:11px;font-weight:700;color:#6ee7b7">EDITOR</div>
+      <div style="padding:10px 14px;flex:1;display:flex;flex-direction:column;gap:8px;overflow-y:auto">
+        <div style="font-size:10px;color:#4b5563" id="devEditorPath">Selecciona un nodo del árbol</div>
+        <textarea id="devEditorValue" style="flex:1;min-height:200px;background:#111;border:1px solid #374151;border-radius:6px;color:#d1fae5;font-family:'IBM Plex Mono',monospace;font-size:11px;padding:8px;resize:vertical;outline:none" placeholder="Valor JSON o texto..."></textarea>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button onclick="devSaveEdit()" style="flex:1;padding:8px;background:#065f46;color:#6ee7b7;border:none;border-radius:6px;font-weight:700;font-size:11px;cursor:pointer;font-family:'IBM Plex Mono',monospace">💾 Guardar</button>
+          <button onclick="devDeleteNode()" style="padding:8px 12px;background:#7f1d1d;color:#fca5a5;border:none;border-radius:6px;font-weight:700;font-size:11px;cursor:pointer;font-family:'IBM Plex Mono',monospace">🗑️ Borrar</button>
+        </div>
+        <div style="border-top:1px solid #1f2937;padding-top:8px">
+          <div style="font-size:10px;color:#4b5563;margin-bottom:6px">AÑADIR CAMPO</div>
+          <input id="devNewKey" placeholder="clave" style="width:100%;background:#111;border:1px solid #374151;border-radius:6px;padding:5px 8px;color:#d1fae5;font-family:'IBM Plex Mono',monospace;font-size:11px;margin-bottom:4px;box-sizing:border-box;outline:none">
+          <textarea id="devNewValue" placeholder='valor (JSON o texto)' style="width:100%;height:60px;background:#111;border:1px solid #374151;border-radius:6px;padding:5px 8px;color:#d1fae5;font-family:'IBM Plex Mono',monospace;font-size:11px;resize:none;box-sizing:border-box;outline:none"></textarea>
+          <button onclick="devAddField()" style="margin-top:4px;width:100%;padding:7px;background:#1e3a5f;color:#93c5fd;border:1px solid #1d4ed8;border-radius:6px;font-weight:700;font-size:11px;cursor:pointer;font-family:'IBM Plex Mono',monospace">➕ Añadir al nodo</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<style>
+.dev-tab{padding:8px 14px;background:none;border:none;color:#4b5563;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;cursor:pointer;border-bottom:2px solid transparent;transition:color .15s}
+.dev-tab.active,.dev-tab:hover{color:#4ade80;border-bottom-color:#4ade80}
+.dev-node{cursor:pointer;user-select:none}
+.dev-node:hover{background:rgba(74,222,128,.08);border-radius:4px}
+.dev-key{color:#93c5fd}
+.dev-str{color:#fbbf24}
+.dev-num{color:#f87171}
+.dev-bool{color:#c084fc}
+.dev-null{color:#6b7280}
+</style>
+
+</body>
+</html>

@@ -1,0 +1,130 @@
+/* ============================================================
+   BOSQUES URBANOS — Design Tokens
+   vars.css  |  Vanilla CSS custom properties
+   ============================================================ */
+
+:root {
+
+  /* ----------------------------------------------------------
+     COLOR PALETTE — Forest greens
+     ---------------------------------------------------------- */
+  --forest-900: #0a2410;
+  --forest-800: #0f3320;
+  --forest-700: #166534;
+  --forest-600: #15803d;
+  --forest-500: #22c55e;
+  --forest-100: #dcfce7;
+  --forest-50:  #f0fdf4;
+
+  /* ----------------------------------------------------------
+     COLOR PALETTE — Gold / Amber
+     ---------------------------------------------------------- */
+  --gold-700:   #b45309;
+  --gold-400:   #d97706;
+  --gold-100:   #fef3c7;
+
+  --amber-900:  #78350f;
+  --amber-400:  #f59e0b;
+  --amber-100:  #fef3c7;
+
+  /* ----------------------------------------------------------
+     COLOR PALETTE — Orange
+     ---------------------------------------------------------- */
+  --orange-700: #c2410c;
+  --orange-400: #f97316;
+  --orange-100: #ffedd5;
+
+  /* ----------------------------------------------------------
+     COLOR PALETTE — Red / Danger
+     ---------------------------------------------------------- */
+  --red-700:    #b91c1c;
+  --red-400:    #f87171;
+  --red-100:    #fee2e2;
+
+  /* ----------------------------------------------------------
+     COLOR PALETTE — Blue / Info
+     ---------------------------------------------------------- */
+  --blue-700:   #1d4ed8;
+  --blue-400:   #60a5fa;
+  --blue-100:   #dbeafe;
+
+  /* ----------------------------------------------------------
+     NEUTRAL / SURFACE PALETTE
+     ---------------------------------------------------------- */
+  --ink:          #1a1a1a;
+  --ink-muted:    #6b6560;
+  --paper:        #faf9f5;
+  --paper-dark:   #f4f1eb;
+  --border:       #d4cfc5;
+  --border-light: #ece8e0;
+  --white:        #ffffff;
+
+  /* ----------------------------------------------------------
+     SPACING SCALE  (4 px base)
+     ---------------------------------------------------------- */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 20px;
+  --s6: 24px;
+  --s7: 32px;
+  --s8: 48px;
+
+  /* ----------------------------------------------------------
+     BORDER RADIUS
+     ---------------------------------------------------------- */
+  --r-sm:   8px;
+  --r-md:   12px;
+  --r-lg:   16px;
+  --r-xl:   20px;
+  --r-full: 9999px;
+
+  /* ----------------------------------------------------------
+     SHADOWS
+     ---------------------------------------------------------- */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08),
+               0 1px 2px rgba(0, 0, 0, 0.06);
+
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07),
+               0 2px 4px rgba(0, 0, 0, 0.06);
+
+  --shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.10),
+               0 4px  8px rgba(0, 0, 0, 0.08);
+
+  --shadow-xl: 0 20px 40px rgba(0, 0, 0, 0.14),
+               0  8px 16px rgba(0, 0, 0, 0.10);
+
+  /* ----------------------------------------------------------
+     TYPOGRAPHY — Font families
+     ---------------------------------------------------------- */
+  --font-body:  'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  --font-serif: 'Fraunces', Georgia, serif;
+  --font-mono:  'IBM Plex Mono', 'Fira Code', monospace;
+
+  /* ----------------------------------------------------------
+     APP DIMENSIONS
+     ---------------------------------------------------------- */
+  --nav-h:     58px;
+  --header-h:  52px;
+  --app-max-w: 480px;
+  --sidebar-w: 0px; /* desktop sidebar width — overridden in media query */
+}
+
+/* ── iPhone 17 Pro Max & notched iPhones — safe area top ── */
+@supports (padding-top: env(safe-area-inset-top)) {
+  :root {
+    --safe-top:    env(safe-area-inset-top,    0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+/* ── Desktop layout (≥ 900px wide) ── */
+@media (min-width: 900px) {
+  :root {
+    --app-max-w: 100vw;
+    --nav-h:     0px;    /* bottom nav hidden on desktop */
+    --header-h:  56px;
+    --sidebar-w: 220px;
+  }
+}
