@@ -891,4 +891,37 @@
     }
   };
 
+  /* ── Expose portal config loader for use by admin inline panel ── */
+  window._pcmLoadForClient = function (clientName, bodyId) {
+    var body = typeof bodyId === 'string' ? document.getElementById(bodyId) : bodyId;
+    if (!body) return;
+
+    body.innerHTML = '<div style="padding:20px;text-align:center;color:#6b7280">⏳ Cargando configuración del portal...</div>';
+
+    var clientKey = fsKey(clientName);
+
+    // Gather trees
+    var db3 = window._dbAll || window._fbRawAll || {};
+    var clientTrees = {};
+    Object.keys(db3).forEach(function (key) {
+      var ev      = db3[key];
+      var evCli   = (ev.cliente || (ev.answers && ev.answers.cliente) || '').trim();
+      if (evCli.toLowerCase() === clientName.toLowerCase()) {
+        var arbolId = ev.arbolId || (ev.answers && ev.answers.arbolId) || key;
+        if (!clientTrees[arbolId] || (ev.timestamp || 0) > ((clientTrees[arbolId] && clientTrees[arbolId].timestamp) || 0)) {
+          clientTrees[arbolId] = Object.assign({}, ev, { _fbKey: key });
+        }
+      }
+    });
+
+    if (typeof window._fbGetPortalConfig === 'function') {
+      window._fbGetPortalConfig(clientKey, function (snap) {
+        var savedCfg = (snap && snap.val ? snap.val() : null) || {};
+        _renderPortalConfigEditor(body, clientName, clientKey, clientTrees, savedCfg);
+      });
+    } else {
+      _renderPortalConfigEditor(body, clientName, clientKey, clientTrees, {});
+    }
+  };
+
 })();

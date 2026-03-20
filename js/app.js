@@ -53,11 +53,16 @@ window.switchTab = function (tab) {
     var lv1 = document.getElementById('db-level-1');
     var lv2 = document.getElementById('db-level-2');
     var lv3 = document.getElementById('db-level-3');
+    var admList = document.getElementById('db-admin-list-wrap');
+    var admDetail = document.getElementById('db-admin-detail-wrap');
     if (lv1) lv1.style.display = 'flex';
     if (lv2) lv2.style.display = 'none';
     if (lv3) lv3.style.display = 'none';
+    if (admList) admList.style.display = 'none';
+    if (admDetail) admDetail.style.display = 'none';
     if (window.APP) window.APP.dbLevel = 1;
     window.dbRenderLv1 && window.dbRenderLv1();
+    window._dbCheckAdminTabBar && window._dbCheckAdminTabBar();
   }
 
   if (tab === 'form') {
