@@ -775,7 +775,12 @@
           });
           html += '</div>';
         } else {
-          html += '<div style="font-size:11px;color:#9ca3af;">💡 Sin fotos en este árbol.</div>';
+          html += '<div style="font-size:11px;color:#9ca3af;margin-bottom:8px;">💡 Sin fotos en este árbol.</div>';
+          html +=
+            '<div>' +
+              '<input type="file" id="pcm-upload-' + ak + '" accept="image/*" capture="environment" style="display:none" onchange="window._pcmUploadTreePhoto(\'' + escHtml(clientKey) + '\',\'' + ak + '\',\'' + escHtml(arbolId) + '\',this)">' +
+              '<button onclick="document.getElementById(\'pcm-upload-' + ak + '\').click()" style="width:100%;padding:9px;background:#eff6ff;color:#1d4ed8;border:1.5px solid #93c5fd;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">📷 Subir foto al árbol</button>' +
+            '</div>';
         }
         html += '</div>';
 
@@ -878,6 +883,60 @@
       window._fbSetPath('clientePortal/' + clientKey + '/config/trees/' + arbolKey, data)
         .then(function () { if (window.showNotif) window.showNotif('✅ Árbol ' + arbolId + ' guardado'); })
         .catch(function (e) { if (window.showNotif) window.showNotif('❌ Error: ' + (e.message || '')); });
+    }
+  };
+
+  /* ── Upload tree photo ── */
+  window._pcmUploadTreePhoto = function(clientKey, arbolKey, arbolId, input) {
+    var file = input.files && input.files[0];
+    if (!file) return;
+    if (window.showNotif) window.showNotif('⏳ Subiendo foto…');
+
+    var cloudName = window.CLOUDINARY_CLOUD_NAME;
+    var preset = window.CLOUDINARY_UPLOAD_PRESET;
+
+    var uploadAndSave = function(url) {
+      var db = window._dbAll || window._fbRawAll || {};
+      var targetKey = null;
+      Object.keys(db).forEach(function(k) {
+        var ev = db[k];
+        var evArbol = ev.arbolId || (ev.answers && ev.answers.arbolId) || k;
+        if (evArbol === arbolId) targetKey = k;
+      });
+      if (targetKey && typeof window._fbUpdateEval === 'function') {
+        var existing = (db[targetKey] && db[targetKey].photoUrls) || [];
+        if (existing.indexOf(url) === -1) existing.push(url);
+        window._fbUpdateEval(targetKey, { photoUrls: existing })
+          .then(function() {
+            if (window.showNotif) window.showNotif('✅ Foto subida y guardada');
+            setTimeout(function() { window._pcmLoadForClient && window._pcmLoadForClient(window._pcmLastClientName, window._pcmLastBodyId); }, 300);
+          })
+          .catch(function(e) { if (window.showNotif) window.showNotif('❌ Error: ' + (e.message||'')); });
+      } else {
+        if (window.showNotif) window.showNotif('⚠️ Foto subida pero no se pudo vincular al árbol');
+      }
+    };
+
+    if (cloudName && preset) {
+      var fd = new FormData();
+      fd.append('file', file);
+      fd.append('upload_preset', preset);
+      fd.append('folder', 'arboles/' + clientKey);
+      fetch('https://api.cloudinary.com/v1_1/' + cloudName + '/image/upload', { method:'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.secure_url) uploadAndSave(data.secure_url);
+          else if (window.showNotif) window.showNotif('❌ Error Cloudinary');
+        })
+        .catch(function() {
+          var reader = new FileReader();
+          reader.onload = function(e) { uploadAndSave(e.target.result); };
+          reader.readAsDataURL(file);
+        });
+    } else {
+      var reader = new FileReader();
+      reader.onload = function(e) { uploadAndSave(e.target.result); };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -984,6 +1043,10 @@
   window._pcmLoadForClient = function (clientName, bodyId) {
     var body = typeof bodyId === 'string' ? document.getElementById(bodyId) : bodyId;
     if (!body) return;
+
+    // Track for re-rendering after upload
+    window._pcmLastClientName = clientName;
+    window._pcmLastBodyId = bodyId;
 
     body.innerHTML = '<div style="padding:20px;text-align:center;color:#6b7280">⏳ Cargando configuración del portal...</div>';
 

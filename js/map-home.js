@@ -28,6 +28,9 @@ var _homeUserMarker = null;
 var _homeWatchId = null;
 var _pickerMapInstance = null;
 var _pickerActiveIdx = -1;
+var _homeMapSatellite = true;
+var _homeSatLayer = null;
+var _homeStreetLayer = null;
 
 var SATELLITE_TILE_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 var SATELLITE_TILE_OPTS = {
@@ -65,7 +68,10 @@ window.initHomeMap = function () {
     tap: true
   }).setView([4.711, -74.0721], 12);
 
-  L.tileLayer(SATELLITE_TILE_URL, SATELLITE_TILE_OPTS).addTo(homeMapInstance);
+  _homeSatLayer = L.tileLayer(SATELLITE_TILE_URL, SATELLITE_TILE_OPTS);
+  _homeSatLayer.addTo(homeMapInstance);
+  _homeStreetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
+  _homeMapSatellite = true;
 
   // No zoom control — pinch-to-zoom on mobile; avoids overlapping floating buttons
 
@@ -1595,5 +1601,20 @@ window._handleFileInput = async function (input) {
   } catch (e) {
     window.showNotif('❌ Error: ' + (e.message || 'desconocido'));
     console.error('_handleFileInput:', e);
+  }
+};
+
+window.toggleHomeMapLayer = function() {
+  if (!homeMapInstance) return;
+  _homeMapSatellite = !_homeMapSatellite;
+  var btn = document.getElementById('homeMapToggleBtn');
+  if (_homeMapSatellite) {
+    if (_homeStreetLayer) _homeStreetLayer.remove();
+    if (_homeSatLayer) _homeSatLayer.addTo(homeMapInstance);
+    if (btn) { btn.textContent = ''; btn.innerHTML = '🗺️ Normal'; btn.title = 'Cambiar a mapa normal'; }
+  } else {
+    if (_homeSatLayer) _homeSatLayer.remove();
+    if (_homeStreetLayer) _homeStreetLayer.addTo(homeMapInstance);
+    if (btn) { btn.innerHTML = '🛰️ Satélite'; btn.title = 'Cambiar a satélite'; }
   }
 };

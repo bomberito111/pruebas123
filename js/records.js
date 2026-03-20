@@ -2349,20 +2349,156 @@
   /* ═══ TAB: PORTAL ═══ */
   function _renderAdminPortal(content) {
     content.style.display = 'flex'; content.style.flexDirection = 'column';
-    var ck = typeof window._fsKey === 'function' ? window._fsKey(_adminCurrentClient || '') : _fsKeyAdmin(_adminCurrentClient || '');
+    var clientName = _adminCurrentClient;
+
     content.innerHTML =
-      '<div style="background:#f0fdf4;padding:10px 14px;border-bottom:1px solid #86efac;display:flex;align-items:center;justify-content:space-between;flex-shrink:0">' +
-        '<div><div style="font-size:12px;font-weight:800;color:#15803d">👁️ Portal de ' + _escAdmin(_adminCurrentClient) + '</div>' +
-        '<div style="font-size:10px;color:#16a34a;margin-top:1px">Configura qué ve el cliente en su portal</div></div>' +
-        '<button onclick="window._pcmSaveAll(\'' + ck + '\');window._adminPortalCfgCache=null" style="padding:8px 16px;background:#0f3320;color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">💾 Guardar todo</button>' +
+      '<div style="background:#fff;padding:8px 14px;border-bottom:1px solid #e5e7eb;display:flex;gap:8px;flex-shrink:0">' +
+        '<button id="ptab-preview" onclick="window._adminPortalSubTab(\'preview\')" style="flex:1;padding:9px;background:#0f3320;color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">👁️ Vista previa</button>' +
+        '<button id="ptab-edit" onclick="window._adminPortalSubTab(\'edit\')" style="flex:1;padding:9px;background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">✏️ Editar portal</button>' +
       '</div>' +
-      '<div id="pcm-inline-body" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch"></div>';
-    if (typeof window._pcmLoadForClient === 'function') {
-      window._pcmLoadForClient(_adminCurrentClient, 'pcm-inline-body');
-    } else {
-      var fb = document.getElementById('pcm-inline-body');
-      if (fb) fb.innerHTML = '<div style="padding:20px;text-align:center"><button onclick="window.openPortalConfigEditor(\'' + _escAdmin(_adminCurrentClient) + '\')" style="padding:12px 24px;background:#0f3320;color:#fff;border:none;border-radius:12px;font-weight:700;font-size:14px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">⚙️ Abrir configuración</button></div>';
-    }
+      '<div id="portal-subtab-content" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;min-height:0;background:#f5f3ef"></div>';
+
+    window._adminPortalSubTab = function(tab) {
+      var pBtn = document.getElementById('ptab-preview');
+      var eBtn = document.getElementById('ptab-edit');
+      var pane = document.getElementById('portal-subtab-content');
+      if (!pane) return;
+
+      if (pBtn) { pBtn.style.background = tab==='preview'?'#0f3320':'#f3f4f6'; pBtn.style.color = tab==='preview'?'#fff':'#6b7280'; pBtn.style.border = tab==='preview'?'none':'1px solid #e5e7eb'; pBtn.style.fontWeight = tab==='preview'?'700':'600'; }
+      if (eBtn) { eBtn.style.background = tab==='edit'?'#0f3320':'#f3f4f6'; eBtn.style.color = tab==='edit'?'#fff':'#6b7280'; eBtn.style.border = tab==='edit'?'none':'1px solid #e5e7eb'; eBtn.style.fontWeight = tab==='edit'?'700':'600'; }
+
+      if (tab === 'edit') {
+        pane.style.background = '#fff';
+        pane.innerHTML = '<div style="padding:16px 14px 90px">' +
+          '<div style="background:#fffbeb;border:1.5px solid #fcd34d;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#92400e;font-weight:600">✏️ Los cambios se guardan árbol por árbol. El cliente ve los cambios al instante.</div>';
+        if (typeof window._pcmLoadForClient === 'function') {
+          window._pcmLoadForClient(clientName, 'portal-subtab-content');
+        } else {
+          pane.innerHTML += '<div style="text-align:center;padding:20px"><button onclick="window.openPortalConfigEditor(\'' + _escAdmin(clientName) + '\')" style="padding:12px 24px;background:#0f3320;color:#fff;border:none;border-radius:12px;font-weight:700;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">⚙️ Abrir editor</button></div>';
+          pane.innerHTML += '</div>';
+        }
+        return;
+      }
+
+      // PREVIEW mode — load portal config and render
+      pane.style.background = '#f5f3ef';
+      pane.innerHTML = '<div style="padding:10px;text-align:center;color:#9ca3af;font-size:12px">⏳ Cargando vista previa…</div>';
+
+      var loadPreview = function(portalCfg) {
+        var db = window._dbAll || window._fbRawAll || {};
+        var treesConfig = (portalCfg && portalCfg.trees) || {};
+        var welcomeMsg = (portalCfg && portalCfg.welcomeMessage) || '';
+
+        // Gather trees for this client
+        var clientTrees = {};
+        Object.keys(db).forEach(function(key) {
+          var ev = db[key];
+          var evClient = (ev.cliente || (ev.answers && ev.answers.cliente) || '').trim();
+          if (evClient.toLowerCase() === clientName.toLowerCase()) {
+            var aid = ev.arbolId || (ev.answers && ev.answers.arbolId) || key;
+            if (!clientTrees[aid] || (ev.timestamp||0) > (clientTrees[aid].timestamp||0)) {
+              clientTrees[aid] = Object.assign({}, ev, {_arbolId: aid});
+            }
+          }
+        });
+
+        var visibleTrees = Object.keys(clientTrees).filter(function(aid) {
+          var ak = _fsKeyAdmin(aid);
+          return treesConfig[ak] && treesConfig[ak].visible;
+        });
+
+        var statusColor = function(s) {
+          if (s==='En buen estado') return '#15803d';
+          if (s==='En monitoreo') return '#0284c7';
+          if (s==='Requiere atención') return '#d97706';
+          if (s==='Intervención programada') return '#b91c1c';
+          if (s==='Intervenido') return '#7c3aed';
+          return '#6b7280';
+        };
+
+        var html = '<div style="max-width:400px;margin:12px auto;padding-bottom:80px">';
+
+        // Phone frame header (like the actual client portal)
+        html += '<div style="background:#0f3320;border-radius:16px 16px 0 0;padding:14px 16px;color:#fff">';
+        html += '<div style="font-size:9px;font-weight:700;color:#86efac;text-transform:uppercase;letter-spacing:.1em;margin-bottom:2px">Bosques Urbanos · Mi Portal</div>';
+        html += '<div style="font-size:16px;font-weight:800;font-family:\'Fraunces\',Georgia,serif">' + _escAdmin(clientName) + '</div>';
+        if (welcomeMsg) {
+          html += '<div style="margin-top:8px;padding:8px 10px;background:rgba(255,255,255,.1);border-radius:8px;font-size:11px;color:#d1fae5;line-height:1.4">' + _escAdmin(welcomeMsg) + '</div>';
+        }
+        html += '</div>';
+
+        // Tab bar preview
+        html += '<div style="background:#fff;display:flex;border-bottom:1px solid #e5e7eb">';
+        html += '<div style="flex:1;padding:10px;text-align:center;font-size:11px;font-weight:700;color:#0f3320;border-bottom:2.5px solid #0f3320">🌳 Mis Árboles</div>';
+        html += '<div style="flex:1;padding:10px;text-align:center;font-size:11px;color:#9ca3af">📄 Documentos</div>';
+        html += '<div style="flex:1;padding:10px;text-align:center;font-size:11px;color:#9ca3af">💬 Consultas</div>';
+        html += '</div>';
+
+        // Tree cards
+        html += '<div style="background:#f8f9fa;padding:12px;border-radius:0 0 16px 16px;border:1.5px solid #e5e7eb;border-top:none">';
+
+        if (visibleTrees.length === 0) {
+          html += '<div style="text-align:center;padding:30px 20px;color:#9ca3af">';
+          html += '<div style="font-size:40px;margin-bottom:10px">🌳</div>';
+          html += '<div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:6px">Ningún árbol configurado</div>';
+          html += '<div style="font-size:11px">Ve a "✏️ Editar portal" para activar qué árboles verá el cliente.</div>';
+          html += '</div>';
+        } else {
+          visibleTrees.forEach(function(aid) {
+            var ev = clientTrees[aid];
+            var ak = _fsKeyAdmin(aid);
+            var cfg = treesConfig[ak] || {};
+            var label = cfg.clientLabel || aid;
+            var status = cfg.clientStatus || '';
+            var note = cfg.adminNote || '';
+            var photos = cfg.visiblePhotos || [];
+            var especie = ev.especie || (ev.answers && ev.answers.especie) || '';
+            var sc = statusColor(status);
+
+            html += '<div style="background:#fff;border-radius:12px;margin-bottom:10px;overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,.08)">';
+
+            // Photo strip
+            if (photos.length > 0) {
+              html += '<div style="height:120px;overflow:hidden;background:#e5e7eb">';
+              html += '<img src="' + _escAdmin(photos[0]) + '" style="width:100%;height:120px;object-fit:cover" onerror="this.parentElement.style.background=\'#e5e7eb\'">';
+              html += '</div>';
+            }
+
+            html += '<div style="padding:12px 14px">';
+            html += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px">';
+            html += '<div>';
+            html += '<div style="font-size:14px;font-weight:700;color:#111827">' + _escAdmin(label) + '</div>';
+            if (especie) html += '<div style="font-size:10px;color:#9ca3af;font-style:italic">' + _escAdmin(especie) + '</div>';
+            html += '</div>';
+            if (status) html += '<span style="flex-shrink:0;padding:3px 9px;background:' + sc + '18;color:' + sc + ';border-radius:20px;font-size:10px;font-weight:700;white-space:nowrap">' + _escAdmin(status) + '</span>';
+            html += '</div>';
+            if (note) html += '<div style="font-size:12px;color:#374151;background:#f8f9fa;border-radius:8px;padding:8px 10px;border-left:3px solid #0f3320;line-height:1.5">' + _escAdmin(note) + '</div>';
+            html += '</div>';
+            html += '</div>';
+          });
+        }
+        html += '</div>';
+
+        // Edit button
+        html += '<button onclick="window._adminPortalSubTab(\'edit\')" style="width:100%;margin-top:12px;padding:13px;background:#0f3320;color:#fff;border:none;border-radius:12px;font-weight:700;font-size:14px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">✏️ Editar portal de ' + _escAdmin(clientName) + '</button>';
+
+        html += '</div>';
+        pane.innerHTML = html;
+      };
+
+      // Load config from Firebase
+      if (typeof window._fbGetPortalConfig === 'function') {
+        var fsk = typeof window._fsKey === 'function' ? window._fsKey(clientName) : _fsKeyAdmin(clientName);
+        window._fbGetPortalConfig(fsk, function(snap) {
+          loadPreview((snap && snap.val) ? snap.val() : {});
+        });
+      } else {
+        loadPreview({});
+      }
+    };
+
+    // Load preview by default
+    window._adminPortalSubTab('preview');
   }
 
   /* ═══ TAB: CHAT ═══ */

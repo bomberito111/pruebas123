@@ -485,8 +485,64 @@ window.adminSendChatMsg = function () {
    SETTINGS TAB (Programador only)
 ───────────────────────────────────────── */
 
+function renderOnlineUsersPanel() {
+  var s = '<div id="online-users-panel">';
+  var presencia = window._presenciaAll || {};
+  var ahora = Date.now();
+  var activos = Object.values(presencia).filter(function(p) {
+    return p.online && (ahora - (p.ts||0)) < 180000;
+  });
+
+  if (activos.length === 0) {
+    s += '<div style="background:#fff;border:1.5px solid #e5e0d8;border-radius:12px;padding:14px;text-align:center;color:#9ca3af;font-size:12px;margin-bottom:12px">Ningún usuario conectado en este momento</div>';
+  } else {
+    s += '<div style="background:#fff;border:1.5px solid #d1fae5;border-radius:12px;padding:12px 14px;margin-bottom:12px">';
+    activos.forEach(function(p) {
+      var since = Math.round((ahora - (p.ts||0)) / 60000);
+      var roleColor = p.role==='programador'?'#7c3aed':p.role==='admin'?'#1d4ed8':'#15803d';
+      s += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f0fdf4">';
+      s += '<span style="width:8px;height:8px;border-radius:50%;background:#22c55e;flex-shrink:0;animation:pulse 2s infinite"></span>';
+      s += '<div style="flex:1;min-width:0">';
+      s += '<div style="font-size:13px;font-weight:700;color:#0f3320">' + escH(p.nombre||p.email||'Usuario') + '</div>';
+      s += '<div style="font-size:10px;color:#9ca3af">Hace ' + (since < 1 ? 'menos de 1 min' : since + ' min') + ' · ' + escH(p.role||'') + '</div>';
+      s += '</div>';
+      s += '<span style="padding:2px 8px;background:'+roleColor+'18;color:'+roleColor+';border-radius:20px;font-size:10px;font-weight:700">'+escH(p.role||'usuario')+'</span>';
+      s += '</div>';
+    });
+    s += '<div style="margin-top:8px;font-size:10px;color:#9ca3af;text-align:right">' + activos.length + ' usuario(s) activo(s)</div>';
+    s += '</div>';
+  }
+
+  s += '<button onclick="adminRefreshOnlineUsers()" style="width:100%;padding:8px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;font-size:11px;font-weight:700;cursor:pointer;color:#15803d;font-family:\'IBM Plex Sans\',sans-serif;margin-bottom:12px">🔄 Actualizar</button>';
+  s += '</div>';
+  return s;
+}
+
+window.adminRefreshOnlineUsers = function() {
+  window.renderAdminPanel();
+};
+
+window._adminSubscribePresence = function() {
+  if (window._presenciaUnsub) return;
+  if (typeof window._fbReadPath === 'function') {
+    window._fbReadPath('presencia', function(snap) {
+      window._presenciaAll = (snap && snap.val) ? snap.val() : {};
+    });
+  }
+};
+
 function renderSettingsTab() {
   var html = '<div style="padding:4px 0">';
+
+  // Subscribe to presence data
+  window._adminSubscribePresence();
+
+  html += '<style>@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}</style>';
+
+  // ── Usuarios conectados en tiempo real ──
+  html += '<div style="font-weight:800;font-size:13px;color:#15803d;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;margin-top:2px">🟢 Conectados ahora</div>';
+  html += renderOnlineUsersPanel();
+  html += '<div style="height:1px;background:#e5e0d8;margin:18px 0 16px"></div>';
 
   // ── Servidores ──
   html += '<div style="font-weight:800;font-size:13px;color:#1d4ed8;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;margin-top:2px">🖥️ Servidores</div>';
