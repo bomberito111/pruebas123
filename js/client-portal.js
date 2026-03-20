@@ -234,6 +234,52 @@
 
     // Initialize or update Leaflet map
     setTimeout(function () { _initLeafletMap(trees); }, 80);
+
+    // Append tree list panel below map (if any trees)
+    if (trees.length > 0) {
+      var treeListHtml = '<div style="background:#fff;border-top:1px solid #e5e7eb;padding:14px 16px;flex-shrink:0">';
+      treeListHtml += '<div style="font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Mis árboles (' + trees.length + ')</div>';
+      trees.forEach(function(item) {
+        var dname   = item.cfg.clientLabel || item.arbolId;
+        var status2 = item.cfg.clientStatus || '';
+        var note2   = item.cfg.adminNote || '';
+        var esp2    = item.ev.especie || (item.ev.answers && item.ev.answers.especie) || '';
+        var scol    = '#6b7280';
+        if (status2 === 'En buen estado')          scol = '#15803d';
+        else if (status2 === 'En monitoreo')        scol = '#0284c7';
+        else if (status2 === 'Requiere atención')   scol = '#d97706';
+        else if (status2 === 'Intervención programada') scol = '#b91c1c';
+        else if (status2 === 'Intervenido')         scol = '#7c3aed';
+        var hasGps = !!_extractGPS(item.ev);
+        treeListHtml +=
+          '<div style="background:#faf9f5;border-radius:12px;padding:12px 14px;margin-bottom:8px;border:1.5px solid #e5e7eb">' +
+            '<div style="display:flex;align-items:center;gap:10px">' +
+              '<div style="font-size:26px">🌳</div>' +
+              '<div style="flex:1;min-width:0">' +
+                '<div style="font-size:14px;font-weight:700;color:#111827;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(dname) + '</div>' +
+                (esp2 ? '<div style="font-size:11px;color:#9ca3af;font-style:italic">' + escHtml(esp2) + '</div>' : '') +
+              '</div>' +
+              (status2 ? '<span style="flex-shrink:0;padding:3px 10px;background:' + scol + '1a;color:' + scol + ';border-radius:20px;font-size:11px;font-weight:700">' + escHtml(status2) + '</span>' : '') +
+            '</div>' +
+            (note2 ? '<div style="margin-top:8px;font-size:12px;color:#374151;background:#fff;border-radius:8px;padding:8px 10px;border-left:3px solid #0f3320;line-height:1.5">' + escHtml(note2) + '</div>' : '') +
+            (hasGps ? '<div style="margin-top:6px;font-size:11px;color:#0ea5e9;font-weight:600">📍 Ubicado en el mapa</div>' : '') +
+          '</div>';
+      });
+      treeListHtml += '</div>';
+
+      // Append to map wrap
+      var mapWrap = document.getElementById('cp-map-wrap');
+      if (mapWrap) {
+        var listEl = document.createElement('div');
+        listEl.style.cssText = 'overflow-y:auto;max-height:45vh;-webkit-overflow-scrolling:touch;';
+        listEl.innerHTML = treeListHtml;
+        // Change map wrap to flex column and shrink map
+        mapWrap.style.cssText = 'display:flex;flex-direction:column;height:100%;min-height:0;';
+        var mapInner = document.getElementById('cp-leaflet-map');
+        if (mapInner) mapInner.style.cssText = 'width:100%;flex:1;min-height:200px;';
+        mapWrap.appendChild(listEl);
+      }
+    }
   }
 
   function _initLeafletMap(trees) {
@@ -277,9 +323,19 @@
       var gps = _extractGPS(item.ev);
       if (!gps) return;
 
-      var especie = item.ev.especie || (item.ev.answers && item.ev.answers.especie) || 'Árbol';
-      var note    = item.cfg.adminNote || '';
-      var date    = fmtDate(item.ev.timestamp || item.ev.ts);
+      var displayName = item.cfg.clientLabel || item.arbolId;
+      var especie     = item.ev.especie || (item.ev.answers && item.ev.answers.especie) || 'Árbol';
+      var note        = item.cfg.adminNote || '';
+      var status      = item.cfg.clientStatus || '';
+      var date        = fmtDate(item.ev.timestamp || item.ev.ts);
+
+      // Status color
+      var statusColor = '#6b7280';
+      if (status === 'En buen estado')          statusColor = '#15803d';
+      else if (status === 'En monitoreo')        statusColor = '#0284c7';
+      else if (status === 'Requiere atención')   statusColor = '#d97706';
+      else if (status === 'Intervención programada') statusColor = '#b91c1c';
+      else if (status === 'Intervenido')         statusColor = '#7c3aed';
 
       // Custom green divIcon
       var icon = L.divIcon({
@@ -292,11 +348,13 @@
       });
 
       var popupHtml =
-        '<div style="font-family:\'IBM Plex Sans\',sans-serif;min-width:160px;">' +
-          '<div style="font-weight:800;font-size:14px;color:#0f3320;margin-bottom:4px;">' + escHtml(item.arbolId) + '</div>' +
-          '<div style="font-size:12px;color:#4b5563;font-style:italic;margin-bottom:4px;">' + escHtml(especie) + '</div>' +
-          (date ? '<div style="font-size:10px;color:#9ca3af;margin-bottom:6px;">📅 ' + escHtml(date) + '</div>' : '') +
-          (note ? '<div style="font-size:12px;color:#1a1a1a;background:#f0fdf4;border-radius:8px;padding:8px;border-left:3px solid #0f3320;margin-top:4px;line-height:1.4;">' + escHtml(note) + '</div>' : '') +
+        '<div style="font-family:\'IBM Plex Sans\',sans-serif;min-width:180px;max-width:240px;">' +
+          '<div style="font-weight:800;font-size:15px;color:#0f3320;margin-bottom:4px;">' + escHtml(displayName) + '</div>' +
+          (status ?
+            '<div style="display:inline-block;padding:2px 10px;background:' + statusColor + '1a;color:' + statusColor + ';border-radius:20px;font-size:11px;font-weight:700;margin-bottom:8px">' + escHtml(status) + '</div>' : '') +
+          (note ?
+            '<div style="font-size:12px;color:#374151;background:#f8f7f4;border-radius:8px;padding:8px 10px;border-left:3px solid #0f3320;margin-bottom:6px;line-height:1.5;">' + escHtml(note) + '</div>' : '') +
+          '<div style="font-size:11px;color:#9ca3af;font-style:italic">' + escHtml(especie) + (date ? ' · ' + escHtml(date) : '') + '</div>' +
         '</div>';
 
       var marker = L.marker([gps.lat, gps.lng], { icon: icon })
@@ -667,12 +725,34 @@
         /* sub-options (visible when toggled on) */
         html += '<div id="pcm-expand-' + ak + '" style="display:' + (isVisible ? 'block' : 'none') + ';">';
 
-        /* admin note */
+        /* client-facing label */
         html +=
           '<div style="margin-bottom:10px;">' +
-            '<div style="font-size:11px;font-weight:700;color:#6b7280;margin-bottom:4px;">📝 Nota para el cliente (opcional)</div>' +
-            '<textarea id="pcm-note-' + ak + '" placeholder="Observaciones visibles para el cliente…" ' +
-              'style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-family:\'IBM Plex Sans\',sans-serif;font-size:12px;resize:none;min-height:50px;outline:none;">' +
+            '<div style="font-size:11px;font-weight:700;color:#0f3320;margin-bottom:4px;">🏷️ Nombre visible para el cliente</div>' +
+            '<div style="font-size:10px;color:#9ca3af;margin-bottom:4px;">Si lo dejas vacío se usará el ID técnico: ' + escHtml(arbolId) + '</div>' +
+            '<input type="text" id="pcm-label-' + ak + '" placeholder="Ej: Roble de la entrada, Araucaria esquina norte…" ' +
+              'value="' + escHtml(treeCfg.clientLabel || '') + '" ' +
+              'style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-family:\'IBM Plex Sans\',sans-serif;font-size:12px;outline:none;">' +
+          '</div>';
+
+        /* client-facing status */
+        var statusOptions = ['', 'En buen estado', 'En monitoreo', 'Requiere atención', 'Intervención programada', 'Intervenido'];
+        html += '<div style="margin-bottom:10px;">';
+        html += '<div style="font-size:11px;font-weight:700;color:#0f3320;margin-bottom:4px;">📋 Estado visible para el cliente</div>';
+        html += '<select id="pcm-status-' + ak + '" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-family:\'IBM Plex Sans\',sans-serif;font-size:12px;background:#fff;outline:none;">';
+        statusOptions.forEach(function(opt) {
+          html += '<option value="' + escHtml(opt) + '"' + (treeCfg.clientStatus === opt ? ' selected' : '') + '>' + (opt || '— Sin estado definido —') + '</option>';
+        });
+        html += '</select>';
+        html += '</div>';
+
+        /* client-facing description */
+        html +=
+          '<div style="margin-bottom:10px;">' +
+            '<div style="font-size:11px;font-weight:700;color:#0f3320;margin-bottom:4px;">📝 Descripción para el cliente</div>' +
+            '<div style="font-size:10px;color:#9ca3af;margin-bottom:4px;">Esta descripción aparecerá en el portal al ver el árbol.</div>' +
+            '<textarea id="pcm-note-' + ak + '" placeholder="Escribe lo que el cliente verá al abrir este árbol…" ' +
+              'style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-family:\'IBM Plex Sans\',sans-serif;font-size:12px;resize:none;min-height:60px;outline:none;">' +
               escHtml(treeCfg.adminNote || '') + '</textarea>' +
           '</div>';
 
@@ -777,9 +857,14 @@
     var selectedPhotos = [];
     photoCbs.forEach(function (cb) { if (cb.checked && cb.dataset.url) selectedPhotos.push(cb.dataset.url); });
 
+    var labelEl  = document.getElementById('pcm-label-'  + arbolKey);
+    var statusEl = document.getElementById('pcm-status-' + arbolKey);
+
     var data = {
-      visible:       visEl  ? visEl.checked  : false,
-      adminNote:     noteEl ? (noteEl.value.trim() || null) : null,
+      visible:       visEl    ? visEl.checked               : false,
+      adminNote:     noteEl   ? (noteEl.value.trim() || null) : null,
+      clientLabel:   labelEl  ? (labelEl.value.trim() || null) : null,
+      clientStatus:  statusEl ? (statusEl.value || null)       : null,
       visiblePhotos: selectedPhotos,
       updatedAt:     Date.now()
     };
@@ -869,9 +954,13 @@
       var photoCbs = document.querySelectorAll('.pcm-photo-cb[data-arbol="' + ak + '"]');
       var selectedPhotos = [];
       photoCbs.forEach(function (cb) { if (cb.checked && cb.dataset.url) selectedPhotos.push(cb.dataset.url); });
+      var labelEl2  = document.getElementById('pcm-label-'  + ak);
+      var statusEl2 = document.getElementById('pcm-status-' + ak);
       treesData[ak] = {
-        visible:       visEl  ? visEl.checked  : false,
-        adminNote:     noteEl ? (noteEl.value.trim() || null) : null,
+        visible:       visEl    ? visEl.checked               : false,
+        adminNote:     noteEl   ? (noteEl.value.trim() || null) : null,
+        clientLabel:   labelEl2 ? (labelEl2.value.trim() || null) : null,
+        clientStatus:  statusEl2? (statusEl2.value || null)       : null,
         visiblePhotos: selectedPhotos,
         updatedAt:     Date.now()
       };
