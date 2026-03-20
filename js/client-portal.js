@@ -712,7 +712,7 @@
             '<label style="display:flex;align-items:center;cursor:pointer;">' +
               '<div style="position:relative;width:44px;height:24px;">' +
                 '<input type="checkbox" id="pcm-vis-' + ak + '" ' + (isVisible ? 'checked' : '') + ' ' +
-                  'onchange="window._pcmToggleTreeExpand(\'' + ak + '\')" ' +
+                  'onchange="window._pcmToggleTreeExpand(\'' + ak + '\',\'' + clientKey + '\',\'' + escHtml(arbolId) + '\')" ' +
                   'style="position:absolute;opacity:0;width:0;height:0;">' +
                 '<div id="pcm-switch-' + ak + '" onclick="document.getElementById(\'pcm-vis-' + ak + '\').click()" ' +
                   'style="position:absolute;inset:0;border-radius:12px;background:' + (isVisible ? '#0f3320' : '#d1d5db') + ';transition:background .2s;cursor:pointer;">' +
@@ -842,16 +842,46 @@
     window._pcmCurrentTreeIds = treeIds;
   }
 
-  /* ── Toggle tree expand panel when checkbox changes ── */
-  window._pcmToggleTreeExpand = function (ak) {
+  /* ── Toggle tree expand panel + auto-save visibility ── */
+  window._pcmToggleTreeExpand = function (ak, clientKey, arbolId) {
     var cb  = document.getElementById('pcm-vis-' + ak);
     var exp = document.getElementById('pcm-expand-' + ak);
     var sw  = document.getElementById('pcm-switch-' + ak);
     var ball = sw ? sw.querySelector('div') : null;
     if (!cb || !exp) return;
-    exp.style.display = cb.checked ? 'block' : 'none';
-    if (sw) sw.style.background = cb.checked ? '#0f3320' : '#d1d5db';
-    if (ball) ball.style.left = cb.checked ? '22px' : '2px';
+    var checked = cb.checked;
+    exp.style.display = checked ? 'block' : 'none';
+    if (sw) sw.style.background = checked ? '#0f3320' : '#d1d5db';
+    if (ball) ball.style.left = checked ? '22px' : '2px';
+
+    // Auto-save visibility to Firebase immediately
+    if (clientKey && ak) {
+      var saveFn = typeof window._fbSetPortalTree === 'function'
+        ? function(d) { return window._fbSetPortalTree(clientKey, ak, d); }
+        : (typeof window._fbSetPath === 'function'
+          ? function(d) { return window._fbSetPath('clientePortal/' + clientKey + '/config/trees/' + ak, d); }
+          : null);
+      if (saveFn) {
+        // Get existing saved data to merge (not overwrite other fields)
+        var noteEl   = document.getElementById('pcm-note-'   + ak);
+        var labelEl  = document.getElementById('pcm-label-'  + ak);
+        var statusEl = document.getElementById('pcm-status-' + ak);
+        var photoCbs = document.querySelectorAll('.pcm-photo-cb[data-arbol="' + ak + '"]');
+        var selPhotos = [];
+        photoCbs.forEach(function(c) { if (c.checked && c.dataset.url) selPhotos.push(c.dataset.url); });
+        var data = {
+          visible:       checked,
+          adminNote:     noteEl   ? (noteEl.value.trim()   || null) : null,
+          clientLabel:   labelEl  ? (labelEl.value.trim()  || null) : null,
+          clientStatus:  statusEl ? (statusEl.value        || null) : null,
+          visiblePhotos: selPhotos,
+          updatedAt:     Date.now()
+        };
+        saveFn(data)
+          .then(function() { window.showNotif && window.showNotif(checked ? '✅ Árbol activado para el cliente' : '🔒 Árbol ocultado del portal'); })
+          .catch(function(e) { window.showNotif && window.showNotif('❌ Error al guardar: ' + (e.message||'')); });
+      }
+    }
   };
 
   /* ── Save individual tree ── */

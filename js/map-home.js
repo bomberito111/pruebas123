@@ -429,7 +429,12 @@ window.initCompass = function () {
     _homeCompassHeading = heading;
 
     // Show bar
-    if (wrap && wrap.style.display === 'none') wrap.style.display = 'block';
+    if (wrap && wrap.style.display === 'none') {
+      wrap.style.display = 'block';
+      // Push top overlay down so compass doesn't cover client pill
+      var topOverlay = document.getElementById('homeTopOverlay');
+      if (topOverlay) topOverlay.style.top = '38px'; // 28px bar + 10px gap
+    }
     _updateCompassBar(heading);
 
     // Update GPS marker icon with direction

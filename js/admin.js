@@ -2228,12 +2228,19 @@ window.adminLoadReports = function (filter) {
   window._reportsFilter = filter || 'all';
   _adminSetReportFilterUI(filter);
 
-  // Suscripción en tiempo real (solo una vez)
+  // Real-time subscription (preferred)
   if (!window._reportsUnsub && typeof window._fbOnReports === 'function') {
     window._reportsUnsub = window._fbOnReports(function (snap) {
       window._reportsCache = (snap && snap.val()) ? snap.val() : {};
       _adminRenderReports();
     });
+  } else if (!window._reportsUnsub && typeof window._fbReadPath === 'function') {
+    // Fallback: one-time read
+    window._fbReadPath('reportes', function (snap) {
+      window._reportsCache = (snap && snap.val ? snap.val() : null) || {};
+      _adminRenderReports();
+    });
+    window._reportsUnsub = true; // prevent re-runs
   } else {
     _adminRenderReports();
   }
@@ -2350,18 +2357,34 @@ function _adminRenderReports() {
 }
 
 window.adminResolveReport = function (key, resolved) {
-  if (typeof window._fbUpdateReport !== 'function') return;
-  window._fbUpdateReport(key, { resolved: resolved })
-    .then(function() { window.showNotif && window.showNotif(resolved ? '✅ Marcado como resuelto' : '↩ Reabierto'); })
-    .catch(function(e) { window.showNotif && window.showNotif('❌ Error: ' + (e.message||'')); });
+  var prom;
+  if (typeof window._fbUpdateReport === 'function') {
+    prom = window._fbUpdateReport(key, { resolved: resolved });
+  } else if (typeof window._fbSetPath === 'function') {
+    // Merge resolved flag into existing report data
+    var cur = (window._reportsCache && window._reportsCache[key]) || {};
+    prom = window._fbSetPath('reportes/' + key, Object.assign({}, cur, { resolved: resolved }));
+  } else { return; }
+  prom.then(function() {
+    if (window._reportsCache && window._reportsCache[key]) window._reportsCache[key].resolved = resolved;
+    _adminRenderReports();
+    window.showNotif && window.showNotif(resolved ? '✅ Marcado como resuelto' : '↩ Reabierto');
+  }).catch(function(e) { window.showNotif && window.showNotif('❌ Error al actualizar: ' + (e.message||'')); });
 };
 
 window.adminDeleteReport = function (key) {
-  if (!confirm('¿Eliminar este reporte?')) return;
-  if (typeof window._fbRemoveReport !== 'function') return;
-  window._fbRemoveReport(key)
-    .then(function() { window.showNotif && window.showNotif('🗑️ Reporte eliminado'); })
-    .catch(function(e) { window.showNotif && window.showNotif('❌ Error: ' + (e.message||'')); });
+  if (!confirm('¿Eliminar este reporte permanentemente?')) return;
+  var prom;
+  if (typeof window._fbRemoveReport === 'function') {
+    prom = window._fbRemoveReport(key);
+  } else if (typeof window._fbDeletePath === 'function') {
+    prom = window._fbDeletePath('reportes/' + key);
+  } else { return; }
+  prom.then(function() {
+    if (window._reportsCache) delete window._reportsCache[key];
+    _adminRenderReports();
+    window.showNotif && window.showNotif('🗑️ Reporte eliminado');
+  }).catch(function(e) { window.showNotif && window.showNotif('❌ Error al eliminar: ' + (e.message||'')); });
 };
 
 /* ── Visor de captura a pantalla completa ── */
