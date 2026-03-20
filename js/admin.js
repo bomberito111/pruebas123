@@ -2344,11 +2344,11 @@ function _adminRenderReports() {
     // Actions
     html += '<div style="display:flex;gap:7px">';
     if (!r.resolved) {
-      html += '<button onclick="adminResolveReport(' + JSON.stringify(key) + ',true)" style="flex:1;padding:7px;background:#f0fdf4;color:#15803d;border:1.5px solid #86efac;border-radius:9px;font-size:11px;font-weight:700;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">✅ Marcar resuelto</button>';
+      html += '<button onclick="adminResolveReport(' + JSON.stringify(key) + ',true)" style="flex:1;padding:7px;background:#f0fdf4;color:#15803d;border:1.5px solid #86efac;border-radius:9px;font-size:11px;font-weight:700;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">✅ Resolver y cerrar</button>';
     } else {
-      html += '<button onclick="adminResolveReport(' + JSON.stringify(key) + ',false)" style="flex:1;padding:7px;background:#f3f4f6;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:9px;font-size:11px;font-weight:600;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">↩ Reabrir</button>';
+      html += '<span style="flex:1;padding:7px;background:#d1fae5;color:#15803d;border:1.5px solid #86efac;border-radius:9px;font-size:11px;font-weight:700;text-align:center;display:flex;align-items:center;justify-content:center;gap:5px;">✅ Resuelto · eliminando…</span>';
     }
-    html += '<button onclick="adminDeleteReport(' + JSON.stringify(key) + ')" style="padding:7px 12px;background:#fff1f2;color:#b91c1c;border:1.5px solid #fecdd3;border-radius:9px;font-size:11px;font-weight:700;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">🗑️</button>';
+    html += '<button onclick="adminDeleteReport(' + JSON.stringify(key) + ')" style="padding:7px 12px;background:#fff1f2;color:#b91c1c;border:1.5px solid #fecdd3;border-radius:9px;font-size:11px;font-weight:700;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif" title="Eliminar ahora">🗑️</button>';
     html += '</div>';
     html += '</div>';
   });
@@ -2356,24 +2356,8 @@ function _adminRenderReports() {
   list.innerHTML = html;
 }
 
-window.adminResolveReport = function (key, resolved) {
-  var prom;
-  if (typeof window._fbUpdateReport === 'function') {
-    prom = window._fbUpdateReport(key, { resolved: resolved });
-  } else if (typeof window._fbSetPath === 'function') {
-    // Merge resolved flag into existing report data
-    var cur = (window._reportsCache && window._reportsCache[key]) || {};
-    prom = window._fbSetPath('reportes/' + key, Object.assign({}, cur, { resolved: resolved }));
-  } else { return; }
-  prom.then(function() {
-    if (window._reportsCache && window._reportsCache[key]) window._reportsCache[key].resolved = resolved;
-    _adminRenderReports();
-    window.showNotif && window.showNotif(resolved ? '✅ Marcado como resuelto' : '↩ Reabierto');
-  }).catch(function(e) { window.showNotif && window.showNotif('❌ Error al actualizar: ' + (e.message||'')); });
-};
-
-window.adminDeleteReport = function (key) {
-  if (!confirm('¿Eliminar este reporte permanentemente?')) return;
+// ── Helper: delete a report from Firebase + local cache ──
+function _doDeleteReport(key) {
   var prom;
   if (typeof window._fbRemoveReport === 'function') {
     prom = window._fbRemoveReport(key);
@@ -2383,8 +2367,49 @@ window.adminDeleteReport = function (key) {
   prom.then(function() {
     if (window._reportsCache) delete window._reportsCache[key];
     _adminRenderReports();
-    window.showNotif && window.showNotif('🗑️ Reporte eliminado');
   }).catch(function(e) { window.showNotif && window.showNotif('❌ Error al eliminar: ' + (e.message||'')); });
+}
+
+window.adminResolveReport = function (key, resolved) {
+  if (!resolved) {
+    // Reabrir: simplemente actualizar estado (no eliminar)
+    var prom;
+    if (typeof window._fbUpdateReport === 'function') {
+      prom = window._fbUpdateReport(key, { resolved: false });
+    } else if (typeof window._fbSetPath === 'function') {
+      var cur = (window._reportsCache && window._reportsCache[key]) || {};
+      prom = window._fbSetPath('reportes/' + key, Object.assign({}, cur, { resolved: false }));
+    } else { return; }
+    prom.then(function() {
+      if (window._reportsCache && window._reportsCache[key]) window._reportsCache[key].resolved = false;
+      _adminRenderReports();
+      window.showNotif && window.showNotif('↩ Reporte reabierto');
+    }).catch(function(e) { window.showNotif && window.showNotif('❌ Error: ' + (e.message||'')); });
+    return;
+  }
+
+  // Marcar como resuelto → mostrar brevemente → auto-eliminar en 2s
+  var prom2;
+  if (typeof window._fbUpdateReport === 'function') {
+    prom2 = window._fbUpdateReport(key, { resolved: true });
+  } else if (typeof window._fbSetPath === 'function') {
+    var cur2 = (window._reportsCache && window._reportsCache[key]) || {};
+    prom2 = window._fbSetPath('reportes/' + key, Object.assign({}, cur2, { resolved: true }));
+  } else { return; }
+
+  prom2.then(function() {
+    if (window._reportsCache && window._reportsCache[key]) window._reportsCache[key].resolved = true;
+    _adminRenderReports();
+    window.showNotif && window.showNotif('✅ Resuelto — se eliminará en 2 segundos');
+    // Auto-eliminar después de 2 segundos
+    setTimeout(function() { _doDeleteReport(key); }, 2000);
+  }).catch(function(e) { window.showNotif && window.showNotif('❌ Error: ' + (e.message||'')); });
+};
+
+window.adminDeleteReport = function (key) {
+  if (!confirm('¿Eliminar este reporte?')) return;
+  _doDeleteReport(key);
+  window.showNotif && window.showNotif('🗑️ Reporte eliminado');
 };
 
 /* ── Visor de captura a pantalla completa ── */
