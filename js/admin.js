@@ -56,8 +56,7 @@ window.renderAdminPanel = async function () {
       { id: 'clientes', label: '🏢 Clientes',   color: '#0ea5e9' }
     ];
     if (myRole === 'programador') {
-      tabs.push({ id: 'settings', label: '⚙️ Config',    color: '#7c3aed' });
-      tabs.push({ id: 'servers',  label: '🖥️ Servidores', color: '#1d4ed8' });
+      tabs.push({ id: 'settings', label: '⚙️ Config', color: '#7c3aed' });
     }
     html += '<div style="display:flex;border-bottom:1px solid #e5e0d8;margin-bottom:16px;overflow-x:auto">';
     tabs.forEach(function (t) {
@@ -74,8 +73,6 @@ window.renderAdminPanel = async function () {
 
   if (window._adminCurrentTab === 'clientes' && (myRole === 'admin' || myRole === 'programador')) {
     html += renderClientesTab(myRole);
-  } else if (window._adminCurrentTab === 'servers' && myRole === 'programador') {
-    html += renderServersTab();
   } else if (window._adminCurrentTab === 'settings' && myRole === 'programador') {
     html += renderSettingsTab();
   } else {
@@ -486,6 +483,12 @@ window.adminSendChatMsg = function () {
 function renderSettingsTab() {
   var html = '<div style="padding:4px 0">';
 
+  // ── Servidores ──
+  html += '<div style="font-weight:800;font-size:13px;color:#1d4ed8;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;margin-top:2px">🖥️ Servidores</div>';
+  html += renderServersTab(true);
+  html += '<div style="height:1px;background:#e5e0d8;margin:18px 0 16px"></div>';
+  html += '<div style="font-weight:800;font-size:13px;color:#7c3aed;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px">⚙️ Sistema &amp; cuenta</div>';
+
   // ── Info de la app ──
   var evalCount = Object.keys(window._fbRawAll || window._dbAll || {}).length;
   var clientCount = Object.keys(window._clientesAll || {}).length;
@@ -568,13 +571,13 @@ function renderSettingsTab() {
    — Cloudinary (secondary, configurable)
 ───────────────────────────────────────── */
 
-function renderServersTab() {
+function renderServersTab(inline) {
   var cfgCN     = window.CLOUDINARY_CLOUD_NAME   || '';
   var cfgPreset = window.CLOUDINARY_UPLOAD_PRESET || '';
   var fbUrl     = window._FIREBASE_DB_URL || '(firebase url no detectada)';
 
   var s = '';
-  s += '<div style="padding:4px 0">';
+  if (!inline) s += '<div style="padding:4px 0">';
 
   // ── SERVER 1: Firebase Realtime DB ──────────────────────────────
   s += '<div style="background:#fff;border:2px solid #22c55e;border-radius:14px;padding:14px 16px;margin-bottom:14px">';
@@ -664,7 +667,7 @@ function renderServersTab() {
   s += '<b>Límite efectivo:</b> ~200KB por foto (comprimidas automáticamente) · No requiere configuración.';
   s += '</div></div>';
 
-  s += '</div>';
+  if (!inline) s += '</div>';
   return s;
 }
 

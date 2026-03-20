@@ -1694,15 +1694,20 @@
   };
 
 
+
   // ═══════════════════════════════════════════════════════
   // ADMIN SECTION — Administración de Clientes
   // ═══════════════════════════════════════════════════════
 
-  var _adminMapInstance   = null;
-  var _adminCurrentClient = null;
-  var _adminCurrentTab    = 'resumen';
-  var _adminChatUnsub     = null;
+  var _adminMapInstance    = null;
+  var _adminCurrentClient  = null;
+  var _adminCurrentTab     = 'resumen';
+  var _adminChatUnsub      = null;
   var _adminPortalCfgCache = null;
+  var _adminAllChatsUnsub  = null;
+  var _adminAllChatsData   = {};   // { clientKey: {messages, unreadCount, lastMsg, clientName} }
+  var _adminTotalUnread    = 0;
+  var _adminSubView        = 'clientes'; // 'clientes' | 'mensajes'
 
   function _fsKeyAdmin(name) {
     if (typeof window._fsKey === 'function') return window._fsKey(name);
@@ -1710,19 +1715,176 @@
   }
 
   function _escAdmin(s) {
-    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
-  /* ── Show/hide admin tab bar based on role ── */
-  window._dbCheckAdminTabBar = function () {
-    var role = window.APP && (window.APP.userRole || window.APP.activeRole);
-    var bar  = document.getElementById('db-section-tabs');
-    if (bar) bar.style.display = (role === 'admin' || role === 'programador') ? 'block' : 'none';
-    var tabR = document.getElementById('db-tab-records');
-    var tabA = document.getElementById('db-tab-admin');
-    if (tabR) { tabR.style.borderBottom = '2.5px solid #0f3320'; tabR.style.color = '#0f3320'; tabR.style.fontWeight = '700'; }
-    if (tabA) { tabA.style.borderBottom = '2.5px solid transparent'; tabA.style.color = '#9ca3af'; tabA.style.fontWeight = '600'; }
+  /* ── Reverse-lookup: clientKey → client name ── */
+  function _adminNameFromKey(clientKey) {
+    var db2 = window._dbAll || {};
+    var found = null;
+    Object.keys(db2).forEach(function(key) {
+      if (found) return;
+      var ev   = db2[key];
+      var name = (typeof window.getClientName === 'function'
+        ? window.getClientName(ev)
+        : (ev.cliente || (ev.answers && ev.answers.cliente) || '')).trim();
+      if (name && _fsKeyAdmin(name) === clientKey) found = name;
+    });
+    return found;
+  }
+
+  /* ── Start listening to ALL client chats ── */
+  function _startAdminChatListener() {
+    if (_adminAllChatsUnsub) return;
+    if (typeof window._fbOnAllChats !== 'function') return;
+    _adminAllChatsUnsub = window._fbOnAllChats(function(snap) {
+      var all = snap && snap.val ? snap.val() : null;
+      _adminAllChatsData = {};
+      _adminTotalUnread  = 0;
+      if (all) {
+        Object.keys(all).forEach(function(clientKey) {
+          var msgs   = (all[clientKey] && all[clientKey].messages) || {};
+          var unread = 0;
+          var lastMsg = null;
+          Object.keys(msgs).forEach(function(mk) {
+            var m = msgs[mk];
+            if (m.from === 'cliente' && !m.read) unread++;
+            if (!lastMsg || (m.ts || 0) > (lastMsg.ts || 0)) lastMsg = Object.assign({}, m, {_key: mk});
+          });
+          var clientName = _adminNameFromKey(clientKey) || clientKey;
+          _adminAllChatsData[clientKey] = { messages: msgs, unreadCount: unread, lastMsg: lastMsg, clientName: clientName };
+          _adminTotalUnread += unread;
+        });
+      }
+      _updateAdminNavBadge();
+      _updateAdminUnreadBadge();
+      _updateDetailChatTabBadge();
+      if (_adminSubView === 'mensajes') {
+        var cont = document.getElementById('db-admin-list');
+        if (cont) _renderAdminMessages(cont);
+      }
+    });
+  }
+
+  function _stopAdminChatListener() {
+    if (_adminAllChatsUnsub) { try { _adminAllChatsUnsub(); } catch(e) {} _adminAllChatsUnsub = null; }
+  }
+
+  function _updateAdminNavBadge() {
+    var dot = document.getElementById('admin-nav-dot');
+    if (dot) dot.style.display = _adminTotalUnread > 0 ? 'block' : 'none';
+  }
+
+  function _updateAdminUnreadBadge() {
+    var badge = document.getElementById('admin-unread-badge');
+    var btn   = document.getElementById('admin-chat-inbox-btn');
+    if (badge) { badge.style.display = _adminTotalUnread > 0 ? 'inline-block' : 'none'; badge.textContent = String(_adminTotalUnread); }
+    if (btn) { btn.style.background = _adminTotalUnread > 0 ? '#fee2e2' : '#f3f4f6'; btn.style.borderColor = _adminTotalUnread > 0 ? '#fecaca' : '#e5e7eb'; btn.style.color = _adminTotalUnread > 0 ? '#b91c1c' : '#6b7280'; }
+  }
+
+  function _updateDetailChatTabBadge() {
+    if (!_adminCurrentClient) return;
+    var clientKey  = _fsKeyAdmin(_adminCurrentClient);
+    var data       = _adminAllChatsData[clientKey];
+    var unread     = data ? data.unreadCount : 0;
+    var chatBtn    = document.getElementById('db-admtab-chat');
+    if (!chatBtn) return;
+    if (unread > 0) {
+      chatBtn.innerHTML = '💬 Chat <span style="background:#b91c1c;color:#fff;font-size:9px;font-weight:800;padding:1px 5px;border-radius:10px;margin-left:2px">' + unread + '</span>';
+      if (_adminCurrentTab !== 'chat') { chatBtn.style.background = '#fee2e2'; chatBtn.style.color = '#b91c1c'; chatBtn.style.border = '1.5px solid #fecaca'; }
+    } else {
+      chatBtn.innerHTML = '💬 Chat';
+    }
+  }
+
+  /* ── Switch between Clientes / Mensajes sub-views ── */
+  window.dbAdminSubView = function(view) {
+    _adminSubView = view;
+    var pillC  = document.getElementById('admin-pill-clientes');
+    var pillM  = document.getElementById('admin-pill-mensajes');
+    var search = document.getElementById('admin-client-search');
+    var ACT = 'padding:6px 16px;background:#0f3320;color:#fff;border:none;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif';
+    var OFF = 'padding:6px 16px;background:#f3f4f6;color:#6b7280;border:none;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif';
+    if (pillC) pillC.style.cssText = view === 'clientes' ? ACT : OFF;
+    if (pillM) pillM.style.cssText = view === 'mensajes' ? ACT : OFF;
+    if (search) search.style.display = view === 'clientes' ? '' : 'none';
+    var cont = document.getElementById('db-admin-list');
+    if (!cont) return;
+    if (view === 'clientes') window.dbRenderAdminClients();
+    else _renderAdminMessages(cont);
   };
+
+  /* ── Messages inbox view ── */
+  function _renderAdminMessages(container) {
+    var keys = Object.keys(_adminAllChatsData);
+    keys.sort(function(a, b) {
+      var da = _adminAllChatsData[a], db3 = _adminAllChatsData[b];
+      if (da.unreadCount > 0 && db3.unreadCount === 0) return -1;
+      if (da.unreadCount === 0 && db3.unreadCount > 0) return  1;
+      return (db3.lastMsg ? db3.lastMsg.ts || 0 : 0) - (da.lastMsg ? da.lastMsg.ts || 0 : 0);
+    });
+
+    if (keys.length === 0) {
+      container.innerHTML =
+        '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px 20px;gap:14px">' +
+          '<div style="font-size:52px">💬</div>' +
+          '<div style="font-size:16px;font-weight:700;color:#374151">Sin conversaciones</div>' +
+          '<div style="font-size:13px;color:#9ca3af;text-align:center">Cuando un cliente te escriba, aparecerá aquí</div>' +
+        '</div>';
+      return;
+    }
+
+    var unreadKeys = keys.filter(function(k) { return _adminAllChatsData[k].unreadCount > 0; });
+    var readKeys   = keys.filter(function(k) { return _adminAllChatsData[k].unreadCount === 0; });
+    var html = '';
+
+    if (unreadKeys.length > 0) {
+      html += '<div style="padding:12px 16px 4px;font-size:10px;font-weight:900;color:#b91c1c;text-transform:uppercase;letter-spacing:.12em;display:flex;align-items:center;gap:6px">';
+      html += '<span style="width:8px;height:8px;border-radius:50%;background:#b91c1c;display:inline-block;animation:pulse 1.5s infinite"></span>';
+      html += 'Sin leer · ' + unreadKeys.length + '</div>';
+      unreadKeys.forEach(function(k) { html += _adminChatListItem(k, true); });
+    }
+    if (readKeys.length > 0) {
+      html += '<div style="padding:12px 16px 4px;font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.1em">Conversaciones anteriores</div>';
+      readKeys.forEach(function(k) { html += _adminChatListItem(k, false); });
+    }
+    container.innerHTML = html;
+  }
+
+  function _adminChatListItem(clientKey, hasUnread) {
+    var data       = _adminAllChatsData[clientKey];
+    var clientName = data.clientName || clientKey;
+    var unread     = data.unreadCount || 0;
+    var lastMsg    = data.lastMsg;
+    var lastText   = lastMsg ? (lastMsg.text || lastMsg.mensaje || '') : '';
+    var lastTs     = lastMsg ? (lastMsg.ts || 0) : 0;
+    var fromClient = lastMsg && lastMsg.from === 'cliente';
+    var enc        = encodeURIComponent(clientName);
+    var letter     = clientName.charAt(0).toUpperCase();
+
+    return (
+      '<div onclick="dbOpenAdminClient(\'' + enc + '\',\'chat\')" ' +
+        'style="display:flex;align-items:center;gap:12px;padding:14px 16px;background:' + (hasUnread ? '#fff5f5' : '#fff') + ';border-bottom:1.5px solid ' + (hasUnread ? '#ffe4e4' : '#f3f4f6') + ';cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background .15s">' +
+        '<div style="position:relative;flex-shrink:0">' +
+          '<div style="width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,#0f3320,#22c55e);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;color:#fff;font-family:Georgia,serif">' + letter + '</div>' +
+          (hasUnread ? '<div style="position:absolute;top:1px;right:1px;width:13px;height:13px;border-radius:50%;background:#b91c1c;border:2.5px solid #fff5f5"></div>' : '') +
+        '</div>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-weight:' + (hasUnread ? '800' : '600') + ';font-size:14px;color:#111827;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + _escAdmin(clientName) + '</div>' +
+          '<div style="font-size:12px;color:' + (hasUnread ? '#374151' : '#9ca3af') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:' + (hasUnread ? '600' : '400') + ';margin-top:2px">' +
+            (fromClient ? '' : '<span style="color:#9ca3af">Tú: </span>') + _escAdmin(lastText.substring(0, 55) || '—') +
+          '</div>' +
+        '</div>' +
+        '<div style="flex-shrink:0;text-align:right">' +
+          '<div style="font-size:10px;color:' + (hasUnread ? '#b91c1c' : '#9ca3af') + ';margin-bottom:4px">' + fmtDate(lastTs) + '</div>' +
+          (unread > 0 ? '<div style="background:#b91c1c;color:#fff;font-size:10px;font-weight:900;padding:2px 8px;border-radius:20px;text-align:center">' + unread + '</div>' : '') +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  /* ── Show/hide admin tab bar based on role (tab bar removed — no-op kept for compatibility) ── */
+  window._dbCheckAdminTabBar = function () {};
 
   /* ── Switch between Records and Admin sections ── */
   window.dbSwitchSection = function (section) {
@@ -1748,6 +1910,8 @@
       if (lv3) lv3.style.display = 'none';
       if (admList)   admList.style.display = 'flex';
       if (admDetail) admDetail.style.display = 'none';
+      _startAdminChatListener();
+      _adminSubView = 'clientes';
       window.dbRenderAdminClients();
     }
   };
@@ -1778,7 +1942,7 @@
     return (typeof g === 'string' && g.indexOf(',') > 0) ? g : null;
   }
 
-  /* ── Render client admin list ── */
+  /* ── Render client admin list (improved visual hierarchy) ── */
   window.dbRenderAdminClients = function () {
     var container = document.getElementById('db-admin-list');
     if (!container) return;
@@ -1817,12 +1981,17 @@
       return;
     }
 
+    var RISK_BORDER = { bajo: '#22c55e', moderado: '#f59e0b', alto: '#f97316', extremo: '#b91c1c' };
     var html = '';
     clients.forEach(function (c) {
       var treeCount = Object.keys(c.trees).length;
       var evalCount = c.evals.length;
       var enc       = encodeURIComponent(c.name);
       var letter    = c.name.charAt(0).toUpperCase();
+      var clientKey = _fsKeyAdmin(c.name);
+      var chatData  = _adminAllChatsData[clientKey] || {};
+      var chatUnread = chatData.unreadCount || 0;
+      var lastMsg    = chatData.lastMsg;
 
       var riskCounts = { bajo: 0, moderado: 0, alto: 0, extremo: 0 };
       var riskLevels = [];
@@ -1835,47 +2004,57 @@
         var t = evs[0].ev.timestamp || 0;
         if (t > lastTs) lastTs = t;
       });
-      var worst  = worstRisk(riskLevels) || 'bajo';
-      var wColor = getRiskColor(worst);
-      var extremoCount = riskCounts.extremo || 0;
-      var altoCount    = riskCounts.alto    || 0;
+      var worst      = worstRisk(riskLevels) || 'bajo';
+      var wColor     = getRiskColor(worst);
+      var borderLeft = RISK_BORDER[worst] || '#e5e7eb';
+      var isUrgent   = worst === 'extremo' || worst === 'alto';
 
       var barHtml = '';
-      ['bajo', 'moderado', 'alto', 'extremo'].forEach(function (r) {
+      ['bajo','moderado','alto','extremo'].forEach(function(r) {
         if (riskCounts[r] > 0) barHtml += '<div style="flex:' + riskCounts[r] + ';background:' + getRiskColor(r) + ';height:100%"></div>';
       });
 
-      // Alert badge
-      var alertBadge = '';
-      if (extremoCount > 0) alertBadge = '<span style="padding:2px 8px;background:#fee2e2;color:#b91c1c;border-radius:12px;font-size:10px;font-weight:800">🔴 ' + extremoCount + ' extremo</span>';
-      else if (altoCount > 0) alertBadge = '<span style="padding:2px 8px;background:#ffedd5;color:#c2410c;border-radius:12px;font-size:10px;font-weight:700">🟠 ' + altoCount + ' alto</span>';
+      // Card with strong left border indicating risk
+      html += '<div style="background:#fff;border:1.5px solid ' + (isUrgent ? wColor + '44' : '#e8e3db') + ';border-left:4px solid ' + borderLeft + ';border-radius:0 14px 14px 0;margin:0 14px 12px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.07)">';
 
-      html += '<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:16px;margin-bottom:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06)">';
+      // Unread chat banner (only if has unread messages)
+      if (chatUnread > 0) {
+        html += '<div style="background:#fee2e2;padding:6px 14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #fecaca">';
+        html += '<span style="width:8px;height:8px;border-radius:50%;background:#b91c1c;flex-shrink:0"></span>';
+        html += '<div style="font-size:11px;font-weight:700;color:#b91c1c;flex:1">' + chatUnread + ' mensaje' + (chatUnread !== 1 ? 's' : '') + ' sin leer</div>';
+        if (lastMsg) {
+          var preview = (lastMsg.text || lastMsg.mensaje || '').substring(0, 40);
+          html += '<div style="font-size:10px;color:#dc2626;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px">"' + _escAdmin(preview) + '"</div>';
+        }
+        html += '</div>';
+      }
 
-      // Header
-      html += '<div style="display:flex;align-items:center;gap:12px;padding:14px">';
-      html += '<div style="width:50px;height:50px;border-radius:14px;background:linear-gradient(135deg,#0f3320 0%,#22c55e 100%);font-size:22px;font-weight:900;color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:Georgia,serif">' + letter + '</div>';
+      // Header row
+      html += '<div style="display:flex;align-items:center;gap:12px;padding:12px 14px">';
+      html += '<div style="width:48px;height:48px;border-radius:13px;background:linear-gradient(135deg,#0f3320 0%,#22c55e 100%);font-size:22px;font-weight:900;color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:Georgia,serif">' + letter + '</div>';
       html += '<div style="flex:1;min-width:0">';
       html += '<div style="font-family:Georgia,serif;font-size:16px;font-weight:700;color:#111827;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + _escAdmin(c.name) + '</div>';
       html += '<div style="display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap">';
       html += '<span style="font-size:11px;color:#6b7280">' + treeCount + ' árbol' + (treeCount !== 1 ? 'es' : '') + '</span>';
-      html += '<span style="font-size:10px;color:#d1d5db">•</span>';
+      html += '<span style="font-size:10px;color:#d1d5db">·</span>';
       html += '<span style="font-size:11px;color:#6b7280">' + fmtDate(lastTs) + '</span>';
-      if (alertBadge) html += alertBadge;
+      if (riskCounts.extremo > 0) html += '<span style="padding:2px 8px;background:#fee2e2;color:#b91c1c;border-radius:10px;font-size:10px;font-weight:800">🔴 ' + riskCounts.extremo + ' extremo</span>';
+      else if (riskCounts.alto > 0) html += '<span style="padding:2px 8px;background:#ffedd5;color:#c2410c;border-radius:10px;font-size:10px;font-weight:700">🟠 ' + riskCounts.alto + ' alto</span>';
       html += '</div>';
       html += '</div>';
-      html += '<span style="padding:3px 10px;background:' + wColor + '22;color:' + wColor + ';border-radius:20px;font-size:10px;font-weight:800;flex-shrink:0;text-transform:uppercase;letter-spacing:.04em">' + getRiskLabel(worst) + '</span>';
+      html += '<span style="padding:3px 10px;background:' + wColor + '22;color:' + wColor + ';border-radius:20px;font-size:10px;font-weight:800;flex-shrink:0;text-transform:uppercase;letter-spacing:.03em">' + getRiskLabel(worst) + '</span>';
       html += '</div>';
 
       // Risk bar
       if (barHtml) html += '<div style="height:5px;display:flex;width:100%">' + barHtml + '</div>';
 
-      // Action buttons grid
-      html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:10px 12px;background:#fafaf8;border-top:1px solid #f0ede8">';
-      html += '<button onclick="dbOpenAdminClient(\'' + enc + '\',\'resumen\')" style="padding:9px 4px;background:#0f3320;color:#fff;border:none;border-radius:9px;font-weight:700;font-size:11px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif;text-align:center">📊<br>Resumen</button>';
-      html += '<button onclick="dbOpenAdminClient(\'' + enc + '\',\'mapa\')" style="padding:9px 4px;background:#f0f9ff;color:#0284c7;border:1.5px solid #bae6fd;border-radius:9px;font-weight:700;font-size:11px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif;text-align:center">🗺️<br>Mapa</button>';
-      html += '<button onclick="dbOpenAdminClient(\'' + enc + '\',\'portal\')" style="padding:9px 4px;background:#f0fdf4;color:#15803d;border:1.5px solid #86efac;border-radius:9px;font-weight:700;font-size:11px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif;text-align:center">👁️<br>Portal</button>';
-      html += '<button onclick="dbOpenAdminClient(\'' + enc + '\',\'cuenta\')" style="padding:9px 4px;background:#faf5ff;color:#7c3aed;border:1.5px solid #ddd6fe;border-radius:9px;font-weight:700;font-size:11px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif;text-align:center">👤<br>Cuenta</button>';
+      // Action buttons
+      html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;padding:9px 12px;background:#fafaf8;border-top:1px solid #f0ede8">';
+      html += '<button onclick="dbOpenAdminClient(\'' + enc + '\',\'resumen\')" style="padding:8px 4px;background:#0f3320;color:#fff;border:none;border-radius:9px;font-weight:700;font-size:11px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif;text-align:center;line-height:1.3">📊<br>Resumen</button>';
+      html += '<button onclick="dbOpenAdminClient(\'' + enc + '\',\'mapa\')" style="padding:8px 4px;background:#f0f9ff;color:#0284c7;border:1.5px solid #bae6fd;border-radius:9px;font-weight:700;font-size:11px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif;text-align:center;line-height:1.3">🗺️<br>Mapa</button>';
+      html += '<button onclick="dbOpenAdminClient(\'' + enc + '\',\'portal\')" style="padding:8px 4px;background:#f0fdf4;color:#15803d;border:1.5px solid #86efac;border-radius:9px;font-weight:700;font-size:11px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif;text-align:center;line-height:1.3">👁️<br>Portal</button>';
+      // Chat button: red if unread
+      html += '<button onclick="dbOpenAdminClient(\'' + enc + '\',\'chat\')" style="padding:8px 4px;background:' + (chatUnread > 0 ? '#fee2e2' : '#faf5ff') + ';color:' + (chatUnread > 0 ? '#b91c1c' : '#7c3aed') + ';border:1.5px solid ' + (chatUnread > 0 ? '#fecaca' : '#ddd6fe') + ';border-radius:9px;font-weight:700;font-size:11px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif;text-align:center;line-height:1.3;position:relative">💬' + (chatUnread > 0 ? ' <span style="background:#b91c1c;color:#fff;font-size:9px;padding:0 4px;border-radius:8px">' + chatUnread + '</span>' : '') + '<br>Chat</button>';
       html += '</div>';
       html += '</div>';
     });
@@ -1898,6 +2077,7 @@
     if (titleEl) titleEl.textContent = _adminCurrentClient;
 
     window.dbAdminTab(_adminCurrentTab);
+    setTimeout(_updateDetailChatTabBadge, 100);
   };
 
   /* ── Back from detail to list ── */
@@ -1908,12 +2088,15 @@
     var detailWrap = document.getElementById('db-admin-detail-wrap');
     if (listWrap)   listWrap.style.display   = 'flex';
     if (detailWrap) detailWrap.style.display = 'none';
+    // Refresh client list to update badges
+    if (_adminSubView === 'clientes') window.dbRenderAdminClients();
+    else _renderAdminMessages(document.getElementById('db-admin-list'));
   };
 
-  /* ── Switch sub-tab ── */
+  /* ── Switch sub-tab in detail view ── */
   window.dbAdminTab = function (tab) {
     _adminCurrentTab = tab;
-    ['resumen', 'mapa', 'portal', 'chat', 'cuenta'].forEach(function (t) {
+    ['resumen','mapa','portal','chat','cuenta'].forEach(function (t) {
       var btn = document.getElementById('db-admtab-' + t);
       if (!btn) return;
       var active = t === tab;
@@ -1921,14 +2104,25 @@
       btn.style.color      = active ? '#fff'     : '#6b7280';
       btn.style.border     = active ? 'none'     : '1px solid #e5e7eb';
       btn.style.fontWeight = active ? '700'      : '600';
+      // Reset innerHTML for chat button
+      if (t === 'chat' && !active) {
+        var clientKey2 = _fsKeyAdmin(_adminCurrentClient || '');
+        var chatDt     = _adminAllChatsData[clientKey2] || {};
+        var cu         = chatDt.unreadCount || 0;
+        if (cu > 0) {
+          btn.innerHTML = '💬 Chat <span style="background:#b91c1c;color:#fff;font-size:9px;padding:1px 5px;border-radius:10px;margin-left:2px">' + cu + '</span>';
+          btn.style.background = '#fee2e2'; btn.style.color = '#b91c1c'; btn.style.border = '1.5px solid #fecaca';
+        } else {
+          btn.innerHTML = '💬 Chat';
+        }
+      }
+      if (t === 'chat' && active) btn.innerHTML = '💬 Chat';
     });
 
     var content = document.getElementById('db-admin-detail-content');
     if (!content) return;
-
     if (tab !== 'mapa' && _adminMapInstance) { try { _adminMapInstance.remove(); } catch (e) {} _adminMapInstance = null; }
     if (tab !== 'chat' && _adminChatUnsub)   { try { _adminChatUnsub(); }          catch (e) {} _adminChatUnsub = null;   }
-
     content.style.display       = 'flex';
     content.style.flexDirection = 'column';
     content.style.overflowY     = 'auto';
@@ -1944,16 +2138,15 @@
 
   /* ═══ TAB: RESUMEN ═══ */
   function _renderAdminResumen(content) {
-    content.style.display       = 'block';
-    content.style.flexDirection = '';
-    content.innerHTML = '<div style="padding:14px 14px 80px">' +
-      '<div style="text-align:center;color:#9ca3af;padding:20px;font-size:13px">Cargando resumen...</div></div>';
-
+    content.style.display = 'block';
+    content.innerHTML = '<div style="padding:14px;text-align:center;color:#9ca3af;font-size:13px">⏳ Cargando...</div>';
     var clientName = _adminCurrentClient;
     var treeBest   = _buildClientTreeMap(clientName);
     var trees      = Object.values(treeBest);
     var totalTrees = trees.length;
     var clientKey  = _fsKeyAdmin(clientName);
+    var chatDt     = _adminAllChatsData[clientKey] || {};
+    var chatUnread = chatDt.unreadCount || 0;
 
     var riskCounts = { bajo: 0, moderado: 0, alto: 0, extremo: 0 };
     var gpsCount   = 0;
@@ -1965,45 +2158,54 @@
       var t = ev.timestamp || ev.ts || 0;
       if (t > lastTs) lastTs = t;
     });
-
     var worst  = worstRisk(trees.map(function (ev) { return getEffRisk(ev); })) || 'bajo';
     var wColor = getRiskColor(worst);
 
-    // Load portal config to show portal stats
-    var portalCfgLoaded = _adminPortalCfgCache;
     function _buildResumenHtml(portalCfg) {
       var treesConfig   = (portalCfg && portalCfg.trees) || {};
       var portalVisible = 0;
-      trees.forEach(function (ev) {
+      trees.forEach(function(ev) {
         var ak = _fsKeyAdmin(ev._arbolId || '');
         if (treesConfig[ak] && treesConfig[ak].visible) portalVisible++;
       });
 
       var html = '<div style="padding:14px 14px 80px">';
 
-      // Stats banner
+      // Alert banner for urgent risk or unread messages
+      if (riskCounts.extremo > 0 || chatUnread > 0) {
+        html += '<div style="background:linear-gradient(135deg,#fee2e2,#fff5f5);border:2px solid #fecaca;border-radius:14px;padding:12px 16px;margin-bottom:14px;display:flex;gap:12px;align-items:center">';
+        html += '<div style="font-size:28px">' + (riskCounts.extremo > 0 ? '🚨' : '💬') + '</div>';
+        html += '<div style="flex:1">';
+        if (riskCounts.extremo > 0) html += '<div style="font-size:13px;font-weight:800;color:#b91c1c">' + riskCounts.extremo + ' árbol' + (riskCounts.extremo !== 1 ? 'es' : '') + ' en riesgo EXTREMO</div>';
+        if (chatUnread > 0) html += '<div style="font-size:12px;font-weight:700;color:#dc2626;margin-top:2px">' + chatUnread + ' mensaje' + (chatUnread !== 1 ? 's' : '') + ' sin leer en el chat</div>';
+        html += '</div>';
+        if (chatUnread > 0) html += '<button onclick="dbAdminTab(\'chat\')" style="padding:7px 14px;background:#b91c1c;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif;flex-shrink:0">Ver chat</button>';
+        html += '</div>';
+      }
+
+      // Stats cards
       html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">';
-      html += _admStatCard(String(totalTrees), 'Árboles evaluados', '#0f3320', '🌳');
-      html += _admStatCard(String(gpsCount) + ' / ' + totalTrees, 'Con GPS', '#0ea5e9', '📍');
-      html += _admStatCard(String(portalVisible) + ' / ' + totalTrees, 'Visibles en portal', '#7c3aed', '👁️');
-      html += _admStatCard(fmtDate(lastTs) || '—', 'Última evaluación', '#6b7280', '📅');
+      html += _admStatCard(String(totalTrees), 'Árboles', '#0f3320', '🌳');
+      html += _admStatCard(gpsCount + '/' + totalTrees, 'Con GPS', '#0ea5e9', '📍');
+      html += _admStatCard(portalVisible + '/' + totalTrees, 'En portal', '#7c3aed', '👁️');
+      html += _admStatCard(chatUnread > 0 ? chatUnread + ' sin leer' : 'Sin pendientes', 'Chat', chatUnread > 0 ? '#b91c1c' : '#6b7280', '💬');
       html += '</div>';
 
       // Risk breakdown
-      var RCOLS2 = { bajo: '#22c55e', moderado: '#f59e0b', alto: '#f97316', extremo: '#b91c1c' };
       html += '<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:14px;padding:14px;margin-bottom:14px">';
-      html += '<div style="font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">📊 Distribución de riesgo</div>';
+      html += '<div style="font-size:11px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px">📊 Distribución de riesgo</div>';
       if (totalTrees === 0) {
-        html += '<div style="text-align:center;color:#9ca3af;font-size:13px;padding:10px">Sin datos</div>';
+        html += '<div style="text-align:center;color:#9ca3af;font-size:13px;padding:8px">Sin evaluaciones</div>';
       } else {
-        ['extremo', 'alto', 'moderado', 'bajo'].forEach(function (r) {
+        ['extremo','alto','moderado','bajo'].forEach(function(r) {
           var count = riskCounts[r] || 0;
+          if (count === 0) return;
           var pct   = Math.round(count / totalTrees * 100);
-          var color = RCOLS2[r];
+          var color = getRiskColor(r);
           html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">';
-          html += '<div style="width:74px;font-size:12px;font-weight:700;color:' + color + '">' + getRiskLabel(r) + '</div>';
-          html += '<div style="flex:1;height:10px;background:#f3f4f6;border-radius:5px;overflow:hidden"><div style="height:100%;background:' + color + ';width:' + pct + '%;border-radius:5px;transition:width .4s"></div></div>';
-          html += '<div style="font-family:\'IBM Plex Mono\',monospace;font-size:13px;font-weight:800;color:' + color + ';width:28px;text-align:right">' + count + '</div>';
+          html += '<div style="width:72px;font-size:12px;font-weight:700;color:' + color + '">' + getRiskLabel(r) + '</div>';
+          html += '<div style="flex:1;height:10px;background:#f3f4f6;border-radius:5px;overflow:hidden"><div style="height:100%;background:' + color + ';width:' + pct + '%;border-radius:5px"></div></div>';
+          html += '<div style="font-family:\'IBM Plex Mono\',monospace;font-size:13px;font-weight:800;color:' + color + ';width:26px;text-align:right">' + count + '</div>';
           html += '</div>';
         });
       }
@@ -2012,66 +2214,53 @@
       // Tree inventory table
       html += '<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:14px;overflow:hidden;margin-bottom:14px">';
       html += '<div style="padding:12px 14px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;justify-content:space-between">';
-      html += '<div style="font-size:12px;font-weight:700;color:#374151">🌳 Inventario (' + totalTrees + ')</div>';
+      html += '<div style="font-size:12px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.05em">🌳 Inventario (' + totalTrees + ')</div>';
       html += '<button onclick="dbOpenClient(\'' + encodeURIComponent(clientName) + '\')" style="padding:5px 12px;background:#f0fdf4;color:#15803d;border:1px solid #86efac;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">Ver en Registros →</button>';
       html += '</div>';
-
       if (trees.length === 0) {
-        html += '<div style="padding:20px;text-align:center;color:#9ca3af;font-size:13px">Sin evaluaciones registradas</div>';
+        html += '<div style="padding:20px;text-align:center;color:#9ca3af;font-size:13px">Sin evaluaciones</div>';
       } else {
-        // Sort by worst risk first
-        var sortedTrees = trees.slice().sort(function (a, b) {
-          var ra = RISK_ORDER[getEffRisk(a)] || 0;
-          var rb = RISK_ORDER[getEffRisk(b)] || 0;
-          return rb - ra;
-        });
-        sortedTrees.forEach(function (ev) {
-          var aid     = ev._arbolId || ev.arbolId || (ev.answers && ev.answers.arbolId) || '?';
-          var esp     = ev.especie || (ev.answers && ev.answers.especie) || '—';
-          var risk    = getEffRisk(ev);
-          var rColor  = getRiskColor(risk);
-          var ts      = ev.timestamp || ev.ts || 0;
-          var hasGps  = !!_extractGPSAdmin(ev);
-          var ak      = _fsKeyAdmin(aid);
+        var sortedTrees = trees.slice().sort(function(a,b) { return (RISK_ORDER[getEffRisk(b)]||0) - (RISK_ORDER[getEffRisk(a)]||0); });
+        sortedTrees.forEach(function(ev) {
+          var aid    = ev._arbolId || ev.arbolId || (ev.answers && ev.answers.arbolId) || '?';
+          var esp    = ev.especie  || (ev.answers && ev.answers.especie) || '—';
+          var risk   = getEffRisk(ev);
+          var rColor = getRiskColor(risk);
+          var ts     = ev.timestamp || ev.ts || 0;
+          var hasGps = !!_extractGPSAdmin(ev);
+          var ak     = _fsKeyAdmin(aid);
           var inPortal = treesConfig[ak] && treesConfig[ak].visible;
-
           html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #f9f9f9">';
           html += '<div style="width:10px;height:10px;border-radius:50%;background:' + rColor + ';flex-shrink:0"></div>';
-          html += '<div style="flex:1;min-width:0">';
-          html += '<div style="font-size:13px;font-weight:600;color:#111827;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + _escAdmin(aid) + '</div>';
-          html += '<div style="font-size:11px;color:#9ca3af;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-style:italic">' + _escAdmin(esp) + '</div>';
-          html += '</div>';
-          html += '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0">';
+          html += '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:#111827;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + _escAdmin(aid) + '</div><div style="font-size:11px;color:#9ca3af;font-style:italic">' + _escAdmin(esp) + '</div></div>';
+          html += '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">';
           html += '<span style="padding:2px 8px;background:' + rColor + '1a;color:' + rColor + ';border-radius:10px;font-size:10px;font-weight:800">' + getRiskLabel(risk) + '</span>';
-          html += '<div style="display:flex;gap:4px">';
-          html += '<span style="font-size:10px;color:' + (hasGps ? '#0ea5e9' : '#d1d5db') + '">' + (hasGps ? '📍' : '—') + '</span>';
-          html += '<span style="font-size:10px;color:' + (inPortal ? '#22c55e' : '#d1d5db') + '">' + (inPortal ? '👁️' : '—') + '</span>';
-          html += '<span style="font-size:10px;color:#9ca3af">' + fmtDate(ts) + '</span>';
-          html += '</div>';
+          html += '<div style="display:flex;gap:5px;font-size:10px"><span style="color:' + (hasGps?'#0ea5e9':'#d1d5db') + '">' + (hasGps?'📍':'—') + '</span><span style="color:' + (inPortal?'#22c55e':'#d1d5db') + '">' + (inPortal?'👁️':'—') + '</span><span style="color:#9ca3af">' + fmtDate(ts) + '</span></div>';
           html += '</div>';
           html += '</div>';
         });
       }
       html += '</div>';
 
-      // Quick actions
+      // Quick action buttons (improved hierarchy)
+      html += '<div style="font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Acciones rápidas</div>';
       html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">';
-      html += '<button onclick="dbAdminTab(\'portal\')" style="padding:12px;background:#f0fdf4;color:#0f3320;border:1.5px solid #86efac;border-radius:12px;font-weight:700;font-size:13px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">👁️ Configurar portal</button>';
-      html += '<button onclick="dbAdminTab(\'mapa\')" style="padding:12px;background:#f0f9ff;color:#0284c7;border:1.5px solid #bae6fd;border-radius:12px;font-weight:700;font-size:13px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">🗺️ Ver en mapa</button>';
+      html += '<button onclick="dbAdminTab(\'portal\')" style="padding:14px;background:#0f3320;color:#fff;border:none;border-radius:12px;font-weight:700;font-size:13px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif;text-align:left">👁️ Configurar<br><span style="font-size:11px;font-weight:400;opacity:.8">Portal del cliente</span></button>';
+      html += '<button onclick="dbAdminTab(\'mapa\')" style="padding:14px;background:#f0f9ff;color:#0284c7;border:1.5px solid #bae6fd;border-radius:12px;font-weight:700;font-size:13px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif;text-align:left">🗺️ Ver mapa<br><span style="font-size:11px;font-weight:400;opacity:.7">GPS de árboles</span></button>';
       html += '</div>';
       html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
-      html += '<button onclick="dbAdminTab(\'chat\')" style="padding:12px;background:#faf5ff;color:#7c3aed;border:1.5px solid #ddd6fe;border-radius:12px;font-weight:700;font-size:13px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">💬 Ir al chat</button>';
-      html += '<button onclick="dbAdminTab(\'cuenta\')" style="padding:12px;background:#f8fafc;color:#475569;border:1.5px solid #e2e8f0;border-radius:12px;font-weight:700;font-size:13px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">👤 Cuenta</button>';
+      html += '<button onclick="dbAdminTab(\'chat\')" style="padding:14px;background:' + (chatUnread > 0 ? '#fee2e2' : '#faf5ff') + ';color:' + (chatUnread > 0 ? '#b91c1c' : '#7c3aed') + ';border:1.5px solid ' + (chatUnread > 0 ? '#fecaca' : '#ddd6fe') + ';border-radius:12px;font-weight:700;font-size:13px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif;text-align:left">💬 Chat' + (chatUnread > 0 ? ' <span style="background:#b91c1c;color:#fff;font-size:10px;padding:1px 6px;border-radius:10px">' + chatUnread + '</span>' : '') + '<br><span style="font-size:11px;font-weight:400;opacity:.7">Mensajes directos</span></button>';
+      html += '<button onclick="dbAdminTab(\'cuenta\')" style="padding:14px;background:#f8fafc;color:#475569;border:1.5px solid #e2e8f0;border-radius:12px;font-weight:700;font-size:13px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif;text-align:left">👤 Cuenta<br><span style="font-size:11px;font-weight:400;opacity:.7">Acceso al portal</span></button>';
       html += '</div>';
 
       html += '</div>';
       content.innerHTML = html;
     }
 
-    if (portalCfgLoaded !== null) {
-      _buildResumenHtml(portalCfgLoaded);
+    if (_adminPortalCfgCache !== null) {
+      _buildResumenHtml(_adminPortalCfgCache);
     } else if (typeof window._fbGetPortalConfig === 'function') {
-      window._fbGetPortalConfig(clientKey, function (snap) {
+      window._fbGetPortalConfig(clientKey, function(snap) {
         _adminPortalCfgCache = (snap && snap.val ? snap.val() : null) || {};
         _buildResumenHtml(_adminPortalCfgCache);
       });
@@ -2083,138 +2272,107 @@
   function _admStatCard(value, label, color, icon) {
     return '<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:13px;padding:14px 10px;text-align:center">' +
       '<div style="font-size:22px;margin-bottom:6px">' + icon + '</div>' +
-      '<div style="font-family:\'IBM Plex Mono\',monospace;font-size:15px;font-weight:900;color:' + color + ';line-height:1.1">' + value + '</div>' +
-      '<div style="font-size:10px;color:#9ca3af;font-weight:600;margin-top:4px;line-height:1.3">' + label + '</div>' +
+      '<div style="font-family:\'IBM Plex Mono\',monospace;font-size:14px;font-weight:900;color:' + color + ';line-height:1.2">' + value + '</div>' +
+      '<div style="font-size:10px;color:#9ca3af;font-weight:600;margin-top:4px">' + label + '</div>' +
     '</div>';
   }
 
   /* ═══ TAB: MAPA ═══ */
   function _renderAdminMap(content) {
     var mapType = window._adminMapType || 'satellite';
-    content.style.display       = 'flex';
-    content.style.flexDirection = 'column';
+    content.style.display = 'flex'; content.style.flexDirection = 'column';
     content.innerHTML =
       '<div style="background:#fff;padding:10px 14px;border-bottom:1px solid #e5e7eb;display:flex;gap:8px;align-items:center;flex-shrink:0">' +
-        '<button id="admin-map-sat" onclick="window._adminSwitchMap(\'satellite\')" style="padding:7px 14px;background:' + (mapType === 'satellite' ? '#0f3320' : '#f3f4f6') + ';color:' + (mapType === 'satellite' ? '#fff' : '#6b7280') + ';border:' + (mapType === 'satellite' ? 'none' : '1px solid #e5e7eb') + ';border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">🛰️ Satélite</button>' +
-        '<button id="admin-map-nor" onclick="window._adminSwitchMap(\'normal\')" style="padding:7px 14px;background:' + (mapType === 'normal' ? '#0f3320' : '#f3f4f6') + ';color:' + (mapType === 'normal' ? '#fff' : '#6b7280') + ';border:' + (mapType === 'normal' ? 'none' : '1px solid #e5e7eb') + ';border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">🗺️ Normal</button>' +
+        '<button id="admin-map-sat" onclick="window._adminSwitchMap(\'satellite\')" style="padding:7px 14px;background:' + (mapType==='satellite'?'#0f3320':'#f3f4f6') + ';color:' + (mapType==='satellite'?'#fff':'#6b7280') + ';border:' + (mapType==='satellite'?'none':'1px solid #e5e7eb') + ';border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">🛰️ Satélite</button>' +
+        '<button id="admin-map-nor" onclick="window._adminSwitchMap(\'normal\')" style="padding:7px 14px;background:' + (mapType==='normal'?'#0f3320':'#f3f4f6') + ';color:' + (mapType==='normal'?'#fff':'#6b7280') + ';border:' + (mapType==='normal'?'none':'1px solid #e5e7eb') + ';border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">🗺️ Normal</button>' +
         '<span id="admin-map-count" style="font-size:11px;color:#6b7280;margin-left:auto"></span>' +
       '</div>' +
       '<div id="admin-map-el" style="flex:1;min-height:0;position:relative;background:#e8e4dc"></div>';
-
-    setTimeout(function () { _buildAdminMap(); }, 200);
+    setTimeout(function() { _buildAdminMap(); }, 200);
   }
 
   function _buildAdminMap() {
     var mapEl = document.getElementById('admin-map-el');
     if (!mapEl || !window.L) return;
-    if (_adminMapInstance) { try { _adminMapInstance.remove(); } catch (e) {} _adminMapInstance = null; }
-
+    if (_adminMapInstance) { try { _adminMapInstance.remove(); } catch(e) {} _adminMapInstance = null; }
     var mapType = window._adminMapType || 'satellite';
     var map = L.map(mapEl, { zoomControl: true, attributionControl: false });
     _adminMapInstance = map;
-
     var satTile  = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20 });
     var normTile = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
     if (mapType === 'satellite') satTile.addTo(map);
     else normTile.addTo(map);
-    map._adminSatTile  = satTile;
-    map._adminNormTile = normTile;
-
-    var RCOLS = { bajo: '#22c55e', moderado: '#f59e0b', alto: '#f97316', extremo: '#b91c1c' };
-    var markers   = [];
-    var treeCount2 = 0;
+    map._adminSatTile = satTile; map._adminNormTile = normTile;
+    var RCOLS = { bajo:'#22c55e', moderado:'#f59e0b', alto:'#f97316', extremo:'#b91c1c' };
+    var markers = [];
     var treeBest2 = _buildClientTreeMap(_adminCurrentClient);
-
-    // Load portal config for visual markers
     var portalTrees = (_adminPortalCfgCache && _adminPortalCfgCache.trees) || {};
-
-    Object.keys(treeBest2).forEach(function (aid) {
+    Object.keys(treeBest2).forEach(function(aid) {
       var ev  = treeBest2[aid];
       var gps = _extractGPSAdmin(ev);
       if (!gps) return;
       var parts = gps.split(',');
-      var lat   = parseFloat(parts[0]);
-      var lng   = parseFloat(parts[1]);
+      var lat = parseFloat(parts[0]), lng = parseFloat(parts[1]);
       if (isNaN(lat) || isNaN(lng)) return;
-
       var risk    = getEffRisk(ev);
       var color   = RCOLS[risk] || '#22c55e';
       var especie = ev.especie || (ev.answers && ev.answers.especie) || '?';
       var ak      = _fsKeyAdmin(aid);
       var inPortal = portalTrees[ak] && portalTrees[ak].visible;
       var adminNote = (portalTrees[ak] && portalTrees[ak].adminNote) || '';
-
       var icon = L.divIcon({
         className: '',
-        html: '<div style="width:32px;height:32px;border-radius:50%;background:' + color + ';border:' + (inPortal ? '3px solid #fff' : '2px dashed rgba(255,255,255,.6)') + ';box-shadow:0 2px 8px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;font-size:14px;opacity:' + (inPortal ? '1' : '0.65') + '">' + (inPortal ? '🌳' : '🌲') + '</div>',
-        iconSize: [32, 32], iconAnchor: [16, 16]
+        html: '<div style="width:32px;height:32px;border-radius:50%;background:' + color + ';border:' + (inPortal?'3px solid #fff':'2px dashed rgba(255,255,255,.5)') + ';box-shadow:0 2px 8px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;font-size:14px;opacity:' + (inPortal?'1':'0.65') + '">' + (inPortal?'🌳':'🌲') + '</div>',
+        iconSize: [32,32], iconAnchor: [16,16]
       });
-
-      var popupHtml =
-        '<div style="font-family:\'IBM Plex Sans\',sans-serif;min-width:160px">' +
-          '<div style="font-weight:700;font-size:14px;color:#0f3320;margin-bottom:3px">' + _escAdmin(aid) + '</div>' +
-          '<div style="font-size:12px;color:#6b7280;font-style:italic;margin-bottom:6px">' + _escAdmin(especie) + '</div>' +
-          '<span style="padding:2px 10px;background:' + color + ';color:#fff;border-radius:20px;font-size:11px;font-weight:700">' + getRiskLabel(risk) + '</span>' +
-          (inPortal ? '<div style="margin-top:6px;font-size:11px;color:#0f3320;font-weight:600">✅ Visible en portal</div>' : '<div style="margin-top:6px;font-size:11px;color:#9ca3af">🚫 Oculto en portal</div>') +
-          (adminNote ? '<div style="margin-top:4px;font-size:11px;color:#6b7280;font-style:italic">' + _escAdmin(adminNote) + '</div>' : '') +
-        '</div>';
-
-      var marker = L.marker([lat, lng], { icon: icon });
-      marker.bindPopup(popupHtml);
+      var marker = L.marker([lat,lng],{icon:icon});
+      marker.bindPopup('<div style="font-family:\'IBM Plex Sans\',sans-serif;min-width:160px"><div style="font-weight:700;font-size:14px;color:#0f3320;margin-bottom:3px">' + _escAdmin(aid) + '</div><div style="font-size:12px;color:#6b7280;font-style:italic;margin-bottom:6px">' + _escAdmin(especie) + '</div><span style="padding:2px 10px;background:' + color + ';color:#fff;border-radius:20px;font-size:11px;font-weight:700">' + getRiskLabel(risk) + '</span>' + (inPortal?'<div style="margin-top:6px;font-size:11px;color:#0f3320;font-weight:600">✅ En portal</div>':'<div style="margin-top:6px;font-size:11px;color:#9ca3af">🚫 Oculto en portal</div>') + (adminNote?'<div style="margin-top:4px;font-size:11px;color:#6b7280;font-style:italic">' + _escAdmin(adminNote) + '</div>':'') + '</div>');
       marker.addTo(map);
       markers.push(marker);
-      treeCount2++;
     });
-
     var countEl = document.getElementById('admin-map-count');
-    if (countEl) countEl.textContent = treeCount2 + ' árbol' + (treeCount2 !== 1 ? 'es' : '') + ' con GPS';
-
+    if (countEl) countEl.textContent = markers.length + ' árbol' + (markers.length!==1?'es':'') + ' con GPS';
     if (markers.length > 0) map.fitBounds(L.featureGroup(markers).getBounds().pad(0.3));
-    else map.setView([-34.0, -70.6], 10);
+    else map.setView([-34.0,-70.6],10);
   }
 
-  window._adminSwitchMap = function (type) {
+  window._adminSwitchMap = function(type) {
     window._adminMapType = type;
-    var sat = document.getElementById('admin-map-sat');
-    var nor = document.getElementById('admin-map-nor');
-    if (sat) { sat.style.background = type === 'satellite' ? '#0f3320' : '#f3f4f6'; sat.style.color = type === 'satellite' ? '#fff' : '#6b7280'; sat.style.border = type === 'satellite' ? 'none' : '1px solid #e5e7eb'; }
-    if (nor) { nor.style.background = type === 'normal'    ? '#0f3320' : '#f3f4f6'; nor.style.color = type === 'normal'    ? '#fff' : '#6b7280'; nor.style.border = type === 'normal'    ? 'none' : '1px solid #e5e7eb'; }
+    var sat = document.getElementById('admin-map-sat'), nor = document.getElementById('admin-map-nor');
+    if (sat) { sat.style.background = type==='satellite'?'#0f3320':'#f3f4f6'; sat.style.color = type==='satellite'?'#fff':'#6b7280'; sat.style.border = type==='satellite'?'none':'1px solid #e5e7eb'; }
+    if (nor) { nor.style.background = type==='normal'?'#0f3320':'#f3f4f6'; nor.style.color = type==='normal'?'#fff':'#6b7280'; nor.style.border = type==='normal'?'none':'1px solid #e5e7eb'; }
     if (!_adminMapInstance) return;
-    if (type === 'satellite') { if (_adminMapInstance._adminNormTile) _adminMapInstance._adminNormTile.remove(); if (_adminMapInstance._adminSatTile) _adminMapInstance._adminSatTile.addTo(_adminMapInstance); }
+    if (type==='satellite') { if (_adminMapInstance._adminNormTile) _adminMapInstance._adminNormTile.remove(); if (_adminMapInstance._adminSatTile) _adminMapInstance._adminSatTile.addTo(_adminMapInstance); }
     else { if (_adminMapInstance._adminSatTile) _adminMapInstance._adminSatTile.remove(); if (_adminMapInstance._adminNormTile) _adminMapInstance._adminNormTile.addTo(_adminMapInstance); }
   };
 
   /* ═══ TAB: PORTAL ═══ */
   function _renderAdminPortal(content) {
-    content.style.display       = 'flex';
-    content.style.flexDirection = 'column';
+    content.style.display = 'flex'; content.style.flexDirection = 'column';
+    var ck = typeof window._fsKey === 'function' ? window._fsKey(_adminCurrentClient || '') : _fsKeyAdmin(_adminCurrentClient || '');
     content.innerHTML =
       '<div style="background:#f0fdf4;padding:10px 14px;border-bottom:1px solid #86efac;display:flex;align-items:center;justify-content:space-between;flex-shrink:0">' +
-        '<div style="font-size:12px;font-weight:700;color:#15803d">👁️ Portal de <strong>' + _escAdmin(_adminCurrentClient) + '</strong></div>' +
-        '<button onclick="var ck=window._fsKey(\'' + _escAdmin(_adminCurrentClient) + '\');window._pcmSaveAll(ck);window._adminPortalCfgCache=null" style="padding:7px 16px;background:#0f3320;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">💾 Guardar todo</button>' +
+        '<div><div style="font-size:12px;font-weight:800;color:#15803d">👁️ Portal de ' + _escAdmin(_adminCurrentClient) + '</div>' +
+        '<div style="font-size:10px;color:#16a34a;margin-top:1px">Configura qué ve el cliente en su portal</div></div>' +
+        '<button onclick="window._pcmSaveAll(\'' + ck + '\');window._adminPortalCfgCache=null" style="padding:8px 16px;background:#0f3320;color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">💾 Guardar todo</button>' +
       '</div>' +
       '<div id="pcm-inline-body" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch"></div>';
-
     if (typeof window._pcmLoadForClient === 'function') {
       window._pcmLoadForClient(_adminCurrentClient, 'pcm-inline-body');
     } else {
-      var fallback = document.getElementById('pcm-inline-body');
-      if (fallback) fallback.innerHTML =
-        '<div style="padding:20px;text-align:center">' +
-          '<button onclick="window.openPortalConfigEditor(\'' + _escAdmin(_adminCurrentClient) + '\')" style="padding:12px 24px;background:#0f3320;color:#fff;border:none;border-radius:12px;font-weight:700;font-size:14px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">⚙️ Abrir configuración de portal</button>' +
-        '</div>';
+      var fb = document.getElementById('pcm-inline-body');
+      if (fb) fb.innerHTML = '<div style="padding:20px;text-align:center"><button onclick="window.openPortalConfigEditor(\'' + _escAdmin(_adminCurrentClient) + '\')" style="padding:12px 24px;background:#0f3320;color:#fff;border:none;border-radius:12px;font-weight:700;font-size:14px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">⚙️ Abrir configuración</button></div>';
     }
   }
 
   /* ═══ TAB: CHAT ═══ */
   function _renderAdminChat(content) {
     var clientKey = _fsKeyAdmin(_adminCurrentClient);
-    content.style.display       = 'flex';
-    content.style.flexDirection = 'column';
+    content.style.display = 'flex'; content.style.flexDirection = 'column';
     content.innerHTML =
       '<div style="background:#fff;padding:10px 14px;border-bottom:1px solid #e5e7eb;flex-shrink:0">' +
-        '<div style="font-size:12px;font-weight:700;color:#374151">💬 Chat con ' + _escAdmin(_adminCurrentClient) + '</div>' +
-        '<div style="font-size:11px;color:#9ca3af;margin-top:2px">Los mensajes llegan al portal del cliente en tiempo real</div>' +
+        '<div style="font-size:13px;font-weight:800;color:#374151">💬 Chat con ' + _escAdmin(_adminCurrentClient) + '</div>' +
+        '<div style="font-size:11px;color:#9ca3af;margin-top:2px">Los mensajes son recibidos en tiempo real por el cliente</div>' +
       '</div>' +
       '<div id="admin-chat-msgs" style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;-webkit-overflow-scrolling:touch;min-height:0;background:#faf9f5">' +
         '<div style="text-align:center;color:#9ca3af;font-size:13px;padding:20px">Cargando mensajes...</div>' +
@@ -2227,21 +2385,21 @@
       '</div>';
 
     if (typeof window._fbOnChat === 'function') {
-      _adminChatUnsub = window._fbOnChat(clientKey, function (snap) {
-        _renderAdminChatMsgs(snap && snap.val ? snap.val() : null);
-        // Mark notifs as read
-        if (typeof window._fbMarkNotifRead === 'function' && snap && snap.val) {
-          var msgs = snap.val();
-          Object.keys(msgs || {}).forEach(function (k) {
-            if (msgs[k] && msgs[k].from === 'cliente' && !msgs[k].read) {
-              window._fbMarkNotifRead && window._fbMarkNotifRead(k);
+      _adminChatUnsub = window._fbOnChat(clientKey, function(snap) {
+        var msgs = snap && snap.val ? snap.val() : null;
+        _renderAdminChatMsgs(msgs);
+        // Mark client messages as read in Firebase
+        if (msgs && typeof window._fbSetPath === 'function') {
+          Object.keys(msgs).forEach(function(mk) {
+            if (msgs[mk].from === 'cliente' && !msgs[mk].read) {
+              window._fbSetPath('chat/' + clientKey + '/messages/' + mk + '/read', true);
             }
           });
         }
       });
     } else {
       var msgEl = document.getElementById('admin-chat-msgs');
-      if (msgEl) msgEl.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:30px;font-size:13px">Chat no disponible.</div>';
+      if (msgEl) msgEl.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:30px">Chat no disponible.</div>';
     }
   }
 
@@ -2250,27 +2408,27 @@
     if (!container) return;
     if (!msgs || Object.keys(msgs).length === 0) {
       container.innerHTML =
-        '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px;gap:8px">' +
-          '<div style="font-size:36px">💬</div>' +
-          '<div style="font-size:14px;font-weight:600;color:#374151">Sin mensajes aún</div>' +
+        '<div style="display:flex;flex-direction:column;align-items:center;padding:40px 20px;gap:10px">' +
+          '<div style="font-size:40px">💬</div>' +
+          '<div style="font-size:14px;font-weight:700;color:#374151">Sin mensajes</div>' +
           '<div style="font-size:12px;color:#9ca3af;text-align:center">El cliente recibirá tus mensajes en su portal</div>' +
         '</div>';
       return;
     }
-    var list = Object.entries(msgs).sort(function (a, b) { return (a[1].ts || 0) - (b[1].ts || 0); });
+    var list = Object.entries(msgs).sort(function(a,b) { return (a[1].ts||0)-(b[1].ts||0); });
     var html = '';
-    list.forEach(function (entry) {
+    list.forEach(function(entry) {
       var m       = entry[1];
       var isAdmin = m.from === 'admin' || m.role === 'admin' || m.role === 'programador';
       var bg      = isAdmin ? '#0f3320' : '#fff';
-      var col     = isAdmin ? '#fff'    : '#111827';
+      var col     = isAdmin ? '#fff' : '#111827';
       var border  = isAdmin ? '' : 'border:1.5px solid #e5e7eb;';
       var align   = isAdmin ? 'flex-end' : 'flex-start';
       html +=
         '<div style="display:flex;justify-content:' + align + '">' +
-          '<div style="max-width:82%;padding:10px 13px;background:' + bg + ';color:' + col + ';border-radius:12px;font-size:13px;line-height:1.5;' + border + 'box-shadow:0 1px 3px rgba(0,0,0,.07)">' +
+          '<div style="max-width:82%;padding:10px 13px;background:' + bg + ';color:' + col + ';border-radius:12px;font-size:13px;line-height:1.5;' + border + 'box-shadow:0 1px 4px rgba(0,0,0,.07)">' +
             '<div>' + _escAdmin(m.text || m.mensaje || '') + '</div>' +
-            '<div style="font-size:10px;opacity:.55;margin-top:5px;text-align:right">' + _escAdmin(m.nombre || (isAdmin ? 'Admin' : 'Cliente')) + ' · ' + fmtDate(m.ts) + '</div>' +
+            '<div style="font-size:10px;opacity:.5;margin-top:5px;text-align:right">' + _escAdmin(m.nombre || (isAdmin?'Admin':'Cliente')) + ' · ' + fmtDate(m.ts) + '</div>' +
           '</div>' +
         '</div>';
     });
@@ -2278,7 +2436,7 @@
     container.scrollTop = container.scrollHeight;
   }
 
-  window.dbAdminSendChat = function () {
+  window.dbAdminSendChat = function() {
     var input = document.getElementById('admin-chat-input');
     var text  = input ? input.value.trim() : '';
     if (!text || !_adminCurrentClient) return;
@@ -2293,154 +2451,112 @@
   /* ═══ TAB: CUENTA ═══ */
   function _renderAdminCuenta(content) {
     content.style.display = 'block';
-    content.innerHTML = '<div style="padding:16px;text-align:center;color:#9ca3af;font-size:13px">⏳ Buscando cuenta vinculada...</div>';
+    content.innerHTML = '<div style="padding:16px;text-align:center;color:#9ca3af;font-size:13px">⏳ Buscando cuenta...</div>';
     if (typeof window._fbGetAllUsers === 'function') {
-      window._fbGetAllUsers().then(function (users) {
-        _renderAdminCuentaContent(content, users);
-      }).catch(function () { _renderAdminCuentaContent(content, null); });
-    } else {
-      _renderAdminCuentaContent(content, null);
-    }
+      window._fbGetAllUsers().then(function(users) { _renderAdminCuentaContent(content, users); }).catch(function() { _renderAdminCuentaContent(content, null); });
+    } else { _renderAdminCuentaContent(content, null); }
   }
 
   function _renderAdminCuentaContent(content, users) {
     var clientName = _adminCurrentClient;
     var linkedUser = null;
     if (users) {
-      Object.keys(users).forEach(function (uid) {
+      Object.keys(users).forEach(function(uid) {
         var u = users[uid];
-        if (u.role === 'cliente' && (u.clienteAsignado || '').toLowerCase().trim() === clientName.toLowerCase().trim()) {
+        if (u.role === 'cliente' && (u.clienteAsignado||'').toLowerCase().trim() === clientName.toLowerCase().trim()) {
           if (!linkedUser) linkedUser = Object.assign({ _uid: uid }, u);
         }
       });
     }
-
     var html = '<div style="padding:16px 16px 80px">';
-
     if (linkedUser) {
       var isActive = linkedUser.activo !== false;
       html +=
         '<div style="background:#f0fdf4;border:2px solid #22c55e;border-radius:16px;padding:16px;margin-bottom:16px">' +
-          '<div style="font-size:11px;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">✅ Cuenta de portal activa</div>' +
+          '<div style="font-size:11px;font-weight:800;color:#15803d;text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px">✅ Cuenta activa</div>' +
           '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">' +
             '<div style="width:50px;height:50px;border-radius:14px;background:linear-gradient(135deg,#0f3320,#22c55e);color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0">🏢</div>' +
-            '<div style="min-width:0">' +
-              '<div style="font-weight:700;font-size:16px;color:#111827;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + _escAdmin(linkedUser.nombre || 'Sin nombre') + '</div>' +
-              '<div style="font-size:12px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + _escAdmin(linkedUser.email || '') + '</div>' +
-              '<div style="font-size:11px;color:#9ca3af;margin-top:2px">Asignado a: ' + _escAdmin(linkedUser.clienteAsignado || clientName) + '</div>' +
-            '</div>' +
+            '<div style="min-width:0"><div style="font-weight:700;font-size:16px;color:#111827;overflow:hidden;text-overflow:ellipsis">' + _escAdmin(linkedUser.nombre||'Sin nombre') + '</div><div style="font-size:12px;color:#6b7280;overflow:hidden;text-overflow:ellipsis">' + _escAdmin(linkedUser.email||'') + '</div><div style="font-size:11px;color:#9ca3af;margin-top:2px">Asignado a: ' + _escAdmin(linkedUser.clienteAsignado||clientName) + '</div></div>' +
           '</div>' +
           '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">' +
-            '<span style="padding:3px 12px;background:' + (isActive ? '#dcfce7' : '#fee2e2') + ';color:' + (isActive ? '#15803d' : '#b91c1c') + ';border-radius:20px;font-size:11px;font-weight:700">' + (isActive ? '● Activo' : '○ Inactivo') + '</span>' +
-            '<span style="padding:3px 12px;background:#eff6ff;color:#1d4ed8;border-radius:20px;font-size:11px;font-weight:700">🏢 Rol: Cliente</span>' +
+            '<span style="padding:3px 12px;background:' + (isActive?'#dcfce7':'#fee2e2') + ';color:' + (isActive?'#15803d':'#b91c1c') + ';border-radius:20px;font-size:11px;font-weight:700">' + (isActive?'● Activo':'○ Inactivo') + '</span>' +
+            '<span style="padding:3px 12px;background:#eff6ff;color:#1d4ed8;border-radius:20px;font-size:11px;font-weight:700">🏢 Cliente</span>' +
           '</div>' +
           '<div style="display:flex;gap:8px">' +
-            '<button onclick="window.toggleUserActive(\'' + linkedUser._uid + '\',' + (!isActive) + ');setTimeout(function(){window.dbAdminTab(\'cuenta\')},800)" ' +
-              'style="flex:1;padding:11px;background:' + (isActive ? '#fff1f2' : '#f0fdf4') + ';color:' + (isActive ? '#b91c1c' : '#15803d') + ';border:1.5px solid ' + (isActive ? '#fecdd3' : '#86efac') + ';border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">' +
-              (isActive ? '🔒 Desactivar acceso' : '✅ Activar acceso') + '</button>' +
-            '<button onclick="window.changeUserPassword && window.changeUserPassword(\'' + linkedUser._uid + '\',\'' + _escAdmin(linkedUser.email || '') + '\')" ' +
-              'style="padding:11px 16px;background:#f8f4ee;border:1.5px solid #d4cfc5;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif;color:#6b6560">🔑 Cambiar clave</button>' +
+            '<button onclick="window.toggleUserActive && window.toggleUserActive(\'' + linkedUser._uid + '\',' + (!isActive) + ');setTimeout(function(){window.dbAdminTab(\'cuenta\')},800)" style="flex:1;padding:11px;background:' + (isActive?'#fff1f2':'#f0fdf4') + ';color:' + (isActive?'#b91c1c':'#15803d') + ';border:1.5px solid ' + (isActive?'#fecdd3':'#86efac') + ';border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">' + (isActive?'🔒 Desactivar':'✅ Activar') + '</button>' +
+            '<button onclick="window.changeUserPassword && window.changeUserPassword(\'' + linkedUser._uid + '\',\'' + _escAdmin(linkedUser.email||'') + '\')" style="padding:11px 16px;background:#f8f4ee;border:1.5px solid #d4cfc5;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif;color:#6b6560">🔑 Clave</button>' +
           '</div>' +
-        '</div>';
-
-      html +=
-        '<div style="background:#f8f7f4;border-radius:12px;padding:14px">' +
-          '<div style="font-size:12px;font-weight:700;color:#0f3320;margin-bottom:6px">ℹ️ Sobre el portal del cliente</div>' +
-          '<div style="font-size:12px;color:#6b7280;line-height:1.7">El cliente entra con su correo y contraseña. Solo verá los árboles y documentos que configures en la pestaña <strong>👁️ Portal</strong>. Puede enviarte mensajes desde la pestaña <strong>💬 Chat</strong>.</div>' +
-        '</div>';
-
+        '</div>' +
+        '<div style="background:#f8f7f4;border-radius:12px;padding:14px"><div style="font-size:12px;font-weight:700;color:#0f3320;margin-bottom:6px">ℹ️ Portal del cliente</div><div style="font-size:12px;color:#6b7280;line-height:1.7">Accede con correo y contraseña. Solo ve lo configurado en <strong>👁️ Portal</strong>.</div></div>';
     } else {
       html +=
         '<div style="background:#fefce8;border:2px solid #fde047;border-radius:16px;padding:20px;margin-bottom:16px;text-align:center">' +
           '<div style="font-size:40px;margin-bottom:12px">🏢</div>' +
           '<div style="font-size:16px;font-weight:700;color:#854d0e;margin-bottom:8px">Sin cuenta de portal</div>' +
-          '<div style="font-size:13px;color:#78350f;margin-bottom:18px;line-height:1.5">' + _escAdmin(clientName) + ' no tiene cuenta. Crea una para que el cliente pueda acceder a su portal con correo y contraseña.</div>' +
-        '</div>';
-
-      // Inline creation form
-      html +=
+          '<div style="font-size:13px;color:#78350f;margin-bottom:18px;line-height:1.5">' + _escAdmin(clientName) + ' no tiene cuenta. Crea una para que pueda acceder al portal.</div>' +
+        '</div>' +
         '<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:16px;padding:16px;margin-bottom:14px">' +
-          '<div style="font-size:13px;font-weight:700;color:#0f3320;margin-bottom:14px">➕ Crear cuenta de cliente</div>' +
+          '<div style="font-size:13px;font-weight:800;color:#0f3320;margin-bottom:14px">➕ Crear cuenta de cliente</div>' +
           '<input type="text" id="acc-nombre" placeholder="Nombre completo *" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #d4cfc5;border-radius:10px;font-family:\'IBM Plex Sans\',sans-serif;font-size:13px;outline:none;background:#faf9f5;margin-bottom:8px">' +
           '<input type="email" id="acc-email" placeholder="correo@empresa.com *" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #d4cfc5;border-radius:10px;font-family:\'IBM Plex Sans\',sans-serif;font-size:13px;outline:none;background:#faf9f5;margin-bottom:8px">' +
-          '<input type="password" id="acc-pass" placeholder="Contraseña (mínimo 6 caracteres) *" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #d4cfc5;border-radius:10px;font-family:\'IBM Plex Sans\',sans-serif;font-size:13px;outline:none;background:#faf9f5;margin-bottom:8px">' +
+          '<input type="password" id="acc-pass" placeholder="Contraseña (mín. 6) *" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #d4cfc5;border-radius:10px;font-family:\'IBM Plex Sans\',sans-serif;font-size:13px;outline:none;background:#faf9f5;margin-bottom:8px">' +
           '<div style="background:#f0fdf4;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:11px;color:#15803d"><strong>Cliente asignado:</strong> ' + _escAdmin(clientName) + '</div>' +
           '<div id="acc-error" style="display:none;background:#fee2e2;color:#b91c1c;border-radius:8px;padding:8px 10px;font-size:12px;font-weight:600;margin-bottom:8px"></div>' +
           '<button id="acc-create-btn" onclick="window.dbAdminCreateAccount(\'' + encodeURIComponent(clientName) + '\')" style="width:100%;padding:12px;background:#0f3320;color:#fff;border:none;border-radius:12px;font-weight:700;font-size:14px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">✅ Crear cuenta</button>' +
         '</div>';
-
-      html +=
-        '<div style="background:#f8f7f4;border-radius:12px;padding:14px">' +
-          '<div style="font-size:12px;font-weight:700;color:#0f3320;margin-bottom:6px">ℹ️ ¿Cómo funciona?</div>' +
-          '<div style="font-size:12px;color:#6b7280;line-height:1.7">Al crear la cuenta, el cliente puede ingresar a la app con su correo y contraseña. Verá únicamente lo que hayas configurado en <strong>👁️ Portal</strong>.</div>' +
-        '</div>';
     }
-
     html += '</div>';
     content.innerHTML = html;
   }
 
-  /* ── Inline account creation ── */
-  window.dbAdminCreateAccount = async function (encName) {
+  window.dbAdminCreateAccount = async function(encName) {
     var clientName = decodeURIComponent(encName);
-    var nombre = (document.getElementById('acc-nombre') ? document.getElementById('acc-nombre').value : '').trim();
-    var email  = (document.getElementById('acc-email')  ? document.getElementById('acc-email').value  : '').trim().toLowerCase();
-    var pass   = (document.getElementById('acc-pass')   ? document.getElementById('acc-pass').value   : '');
+    var nombre = (document.getElementById('acc-nombre')||{}).value || '';
+    var email  = ((document.getElementById('acc-email')||{}).value || '').trim().toLowerCase();
+    var pass   = (document.getElementById('acc-pass')||{}).value || '';
     var errEl  = document.getElementById('acc-error');
     var btn    = document.getElementById('acc-create-btn');
-
+    nombre = nombre.trim();
     if (errEl) errEl.style.display = 'none';
-    if (!nombre || !email || !pass) { if (errEl) { errEl.textContent = 'Completa todos los campos obligatorios.'; errEl.style.display = 'block'; } return; }
-    if (pass.length < 6) { if (errEl) { errEl.textContent = 'La contraseña debe tener al menos 6 caracteres.'; errEl.style.display = 'block'; } return; }
-    if (!email.includes('@')) { if (errEl) { errEl.textContent = 'Ingresa un correo válido.'; errEl.style.display = 'block'; } return; }
-
-    if (btn) { btn.disabled = true; btn.textContent = 'Creando...'; }
+    if (!nombre || !email || !pass) { if (errEl) { errEl.textContent='Completa todos los campos.'; errEl.style.display='block'; } return; }
+    if (pass.length < 6) { if (errEl) { errEl.textContent='Contraseña mínimo 6 caracteres.'; errEl.style.display='block'; } return; }
+    if (!email.includes('@')) { if (errEl) { errEl.textContent='Correo no válido.'; errEl.style.display='block'; } return; }
+    if (btn) { btn.disabled=true; btn.textContent='Creando...'; }
     try {
       var salt = window._generateSalt();
       var hash = await window._hashPassword(pass, salt);
-      var uid  = 'u_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-      var userData = {
-        nombre: nombre, email: email, role: 'cliente',
-        salt: salt, passwordHash: hash,
-        activo: true, clientesPermitidos: [],
-        clienteAsignado: clientName,
-        creadoPor: (window._AUTH && window._AUTH.currentUser) ? window._AUTH.currentUser.uid : null,
-        creadoEn: Date.now()
-      };
-      await window._fbSaveUser(uid, userData);
+      var uid  = 'u_' + Date.now() + '_' + Math.random().toString(36).slice(2,8);
+      await window._fbSaveUser(uid, { nombre:nombre, email:email, role:'cliente', salt:salt, passwordHash:hash, activo:true, clientesPermitidos:[], clienteAsignado:clientName, creadoPor:(window._AUTH&&window._AUTH.currentUser?window._AUTH.currentUser.uid:null), creadoEn:Date.now() });
       showNotif('✅ Cuenta creada para ' + clientName);
       window.dbAdminTab('cuenta');
-    } catch (e) {
-      if (btn) { btn.disabled = false; btn.textContent = '✅ Crear cuenta'; }
-      if (errEl) { errEl.textContent = e.message || 'Error al crear la cuenta.'; errEl.style.display = 'block'; }
+    } catch(e) {
+      if (btn) { btn.disabled=false; btn.textContent='✅ Crear cuenta'; }
+      if (errEl) { errEl.textContent=e.message||'Error al crear la cuenta.'; errEl.style.display='block'; }
     }
   };
 
   /* ══════════════════════════════════════════════════════════
-     BUG REPORT SYSTEM (shake-triggered only)
+     BUG REPORT SYSTEM (shake only)
   ══════════════════════════════════════════════════════════ */
   window.openReportModal = function () {
     var modal = document.getElementById('reportModal');
     if (!modal) return;
     modal.style.display = 'flex';
-
-    var screenNames = { viewHome: '🏠 Inicio', viewDB: '🗂️ Registros', viewForm: '📋 Formulario', viewMap: '🗺️ Mapa' };
+    var screenNames = { viewHome:'🏠 Inicio', viewDB:'🗂️ Registros', viewForm:'📋 Formulario', viewMap:'🗺️ Mapa' };
     var currentScreen = 'Desconocida';
-    ['viewHome', 'viewDB', 'viewForm', 'viewMap'].forEach(function (id) {
+    ['viewHome','viewDB','viewForm','viewMap'].forEach(function(id) {
       var el = document.getElementById(id);
-      if (el && el.classList.contains('active')) currentScreen = screenNames[id] || id;
+      if (el && el.classList.contains('active')) currentScreen = screenNames[id]||id;
     });
     var admDetail = document.getElementById('db-admin-detail-wrap');
-    if (admDetail && admDetail.style.display !== 'none') currentScreen = '🏢 Admin — ' + (_adminCurrentClient || '');
-
+    if (admDetail && admDetail.style.display !== 'none') currentScreen = '🏢 Admin — ' + (_adminCurrentClient||'');
     var label = document.getElementById('report-screen-label');
     if (label) label.textContent = 'Pantalla detectada: ' + currentScreen;
     window._reportCurrentScreen = currentScreen;
-
     var desc = document.getElementById('report-desc');
-    if (desc) { desc.value = ''; setTimeout(function () { desc.focus(); }, 200); }
+    if (desc) { desc.value=''; setTimeout(function(){ desc.focus(); },200); }
     var sec = document.getElementById('report-section');
-    if (sec) sec.value = '';
+    if (sec) sec.value='';
   };
 
   window.closeReportModal = function () {
@@ -2452,44 +2568,31 @@
     var desc = document.getElementById('report-desc');
     var sec  = document.getElementById('report-section');
     var text = desc ? desc.value.trim() : '';
-    if (!text) { showNotif('⚠️ Describe el problema antes de enviar', 'warning'); return; }
-    var report = {
-      description: text,
-      section:     sec ? (sec.value || 'sin especificar') : 'sin especificar',
-      screen:      window._reportCurrentScreen || 'desconocida',
-      evaluador:   (window.APP && window.APP.activeEngineer) || 'desconocido',
-      role:        (window.APP && (window.APP.userRole || window.APP.activeRole)) || 'desconocido',
-      ts:          Date.now(), resolved: false
-    };
+    if (!text) { showNotif('⚠️ Describe el problema antes de enviar','warning'); return; }
+    var report = { description:text, section:sec?(sec.value||'sin especificar'):'sin especificar', screen:window._reportCurrentScreen||'desconocida', evaluador:(window.APP&&window.APP.activeEngineer)||'desconocido', role:(window.APP&&(window.APP.userRole||window.APP.activeRole))||'desconocido', ts:Date.now(), resolved:false };
     if (typeof window._fbPushReport === 'function') {
-      window._fbPushReport(report)
-        .then(function () { window.closeReportModal(); showNotif('✅ Reporte enviado — gracias'); })
-        .catch(function (e) { showNotif('❌ Error: ' + (e.message || '')); });
+      window._fbPushReport(report).then(function(){ window.closeReportModal(); showNotif('✅ Reporte enviado'); }).catch(function(e){ showNotif('❌ Error: '+(e.message||'')); });
     } else {
-      var stored = JSON.parse(localStorage.getItem('bu_reports') || '[]');
-      stored.push(report);
-      localStorage.setItem('bu_reports', JSON.stringify(stored));
-      window.closeReportModal();
-      showNotif('✅ Reporte guardado');
+      var stored = JSON.parse(localStorage.getItem('bu_reports')||'[]');
+      stored.push(report); localStorage.setItem('bu_reports',JSON.stringify(stored));
+      window.closeReportModal(); showNotif('✅ Reporte guardado');
     }
   };
 
   // Shake to report
-  (function () {
-    var _lastShake  = 0;
-    var _shakeCount = 0;
-    var _shakeTimer = null;
-    window.addEventListener('devicemotion', function (e) {
+  (function(){
+    var _lastShake=0, _shakeCount=0, _shakeTimer=null;
+    window.addEventListener('devicemotion', function(e){
       var acc = e.acceleration || e.accelerationIncludingGravity;
       if (!acc) return;
-      var mag = Math.sqrt((acc.x || 0) * (acc.x || 0) + (acc.y || 0) * (acc.y || 0) + (acc.z || 0) * (acc.z || 0));
-      if (!e.acceleration) mag = Math.abs(mag - 9.8);
+      var mag = Math.sqrt((acc.x||0)*(acc.x||0)+(acc.y||0)*(acc.y||0)+(acc.z||0)*(acc.z||0));
+      if (!e.acceleration) mag = Math.abs(mag-9.8);
       if (mag > 18) {
         _shakeCount++;
         clearTimeout(_shakeTimer);
-        _shakeTimer = setTimeout(function () { _shakeCount = 0; }, 1000);
-        if (_shakeCount >= 3 && Date.now() - _lastShake > 4000) {
-          _lastShake = Date.now(); _shakeCount = 0;
+        _shakeTimer = setTimeout(function(){ _shakeCount=0; }, 1000);
+        if (_shakeCount >= 3 && Date.now()-_lastShake > 4000) {
+          _lastShake=Date.now(); _shakeCount=0;
           window.openReportModal && window.openReportModal();
         }
       }

@@ -63,7 +63,6 @@ window.switchTab = function (tab) {
     if (admDetail) admDetail.style.display = 'none';
     if (window.APP) window.APP.dbLevel = 1;
     window.dbRenderLv1 && window.dbRenderLv1();
-    window._dbCheckAdminTabBar && window._dbCheckAdminTabBar();
   }
 
   if (tab === 'admin') {
@@ -77,13 +76,7 @@ window.switchTab = function (tab) {
     if (lv3a) lv3a.style.display = 'none';
     if (aList) aList.style.display = 'flex';
     if (aDet)  aDet.style.display  = 'none';
-    window._dbCheckAdminTabBar && window._dbCheckAdminTabBar();
     setTimeout(function () {
-      // force 'admin' sub-tab active styling
-      var tabR = document.getElementById('db-tab-records');
-      var tabA = document.getElementById('db-tab-admin');
-      if (tabR) { tabR.style.borderBottom = '2.5px solid transparent'; tabR.style.color = '#9ca3af'; tabR.style.fontWeight = '600'; }
-      if (tabA) { tabA.style.borderBottom = '2.5px solid #0f3320';     tabA.style.color = '#0f3320'; tabA.style.fontWeight = '700'; }
       window.dbRenderAdminClients && window.dbRenderAdminClients();
     }, 50);
   }
@@ -106,8 +99,6 @@ window._applyRoleNav = function () {
   var reportBtn = document.getElementById('reportBugBtn');
   if (reportBtn) reportBtn.style.display = 'none';
 
-  // Update admin tab bar visibility in records view
-  window._dbCheckAdminTabBar && window._dbCheckAdminTabBar();
 };
 
 window.closeFormView = function () {
