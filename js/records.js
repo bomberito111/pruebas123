@@ -2536,7 +2536,7 @@
   };
 
   /* ══════════════════════════════════════════════════════════
-     BUG REPORT SYSTEM (shake only)
+     SISTEMA DE REPORTES Y SUGERENCIAS (shake only)
   ══════════════════════════════════════════════════════════ */
   window.openReportModal = function () {
     var modal = document.getElementById('reportModal');
@@ -2557,6 +2557,8 @@
     if (desc) { desc.value=''; setTimeout(function(){ desc.focus(); },200); }
     var sec = document.getElementById('report-section');
     if (sec) sec.value='';
+    // Reset tipo a 'error' por defecto
+    window.reportSetType && window.reportSetType('error');
   };
 
   window.closeReportModal = function () {
@@ -2564,35 +2566,77 @@
     if (modal) modal.style.display = 'none';
   };
 
+  window.reportSetType = function (tipo) {
+    var hidden = document.getElementById('report-type-val');
+    if (hidden) hidden.value = tipo;
+    var btns = {
+      'error':     document.getElementById('report-type-error'),
+      'sugerencia':document.getElementById('report-type-sug'),
+      'otro':      document.getElementById('report-type-otro')
+    };
+    var actBg   = { error:'#fff1f2', sugerencia:'#fefce8', otro:'#eff6ff' };
+    var actColor= { error:'#b91c1c', sugerencia:'#92400e', otro:'#1d4ed8' };
+    var actBord = { error:'#fca5a5', sugerencia:'#fcd34d', otro:'#93c5fd' };
+    Object.keys(btns).forEach(function(k) {
+      var b = btns[k];
+      if (!b) return;
+      if (k === tipo) {
+        b.style.background   = actBg[k];
+        b.style.color        = actColor[k];
+        b.style.borderColor  = actBord[k];
+        b.style.fontWeight   = '700';
+      } else {
+        b.style.background   = '#faf9f5';
+        b.style.color        = '#6b7280';
+        b.style.borderColor  = '#d4cfc5';
+        b.style.fontWeight   = '600';
+      }
+    });
+  };
+
   window.submitReport = function () {
-    var desc = document.getElementById('report-desc');
-    var sec  = document.getElementById('report-section');
-    var text = desc ? desc.value.trim() : '';
-    if (!text) { showNotif('⚠️ Describe el problema antes de enviar','warning'); return; }
-    var report = { description:text, section:sec?(sec.value||'sin especificar'):'sin especificar', screen:window._reportCurrentScreen||'desconocida', evaluador:(window.APP&&window.APP.activeEngineer)||'desconocido', role:(window.APP&&(window.APP.userRole||window.APP.activeRole))||'desconocido', ts:Date.now(), resolved:false };
+    var desc  = document.getElementById('report-desc');
+    var sec   = document.getElementById('report-section');
+    var tipo  = document.getElementById('report-type-val');
+    var text  = desc ? desc.value.trim() : '';
+    if (!text) { showNotif('⚠️ Describe el reporte antes de enviar','warning'); return; }
+    var report = {
+      description : text,
+      tipo        : tipo ? (tipo.value || 'error') : 'error',
+      section     : sec  ? (sec.value  || 'sin especificar') : 'sin especificar',
+      screen      : window._reportCurrentScreen || 'desconocida',
+      evaluador   : (window.APP && window.APP.activeEngineer) || 'desconocido',
+      role        : (window.APP && (window.APP.userRole || window.APP.activeRole)) || 'desconocido',
+      ts          : Date.now(),
+      resolved    : false
+    };
     if (typeof window._fbPushReport === 'function') {
-      window._fbPushReport(report).then(function(){ window.closeReportModal(); showNotif('✅ Reporte enviado'); }).catch(function(e){ showNotif('❌ Error: '+(e.message||'')); });
+      window._fbPushReport(report)
+        .then(function() { window.closeReportModal(); showNotif('✅ Reporte enviado'); })
+        .catch(function(e) { showNotif('❌ Error al enviar: ' + (e.message || '')); });
     } else {
-      var stored = JSON.parse(localStorage.getItem('bu_reports')||'[]');
-      stored.push(report); localStorage.setItem('bu_reports',JSON.stringify(stored));
-      window.closeReportModal(); showNotif('✅ Reporte guardado');
+      var stored = JSON.parse(localStorage.getItem('bu_reports') || '[]');
+      stored.push(report);
+      localStorage.setItem('bu_reports', JSON.stringify(stored));
+      window.closeReportModal();
+      showNotif('✅ Reporte guardado');
     }
   };
 
-  // Shake to report
+  // Shake para abrir reporte — umbral 25 m/s², 4 sacudidas en 1.5s, cooldown 5s
   (function(){
     var _lastShake=0, _shakeCount=0, _shakeTimer=null;
     window.addEventListener('devicemotion', function(e){
       var acc = e.acceleration || e.accelerationIncludingGravity;
       if (!acc) return;
       var mag = Math.sqrt((acc.x||0)*(acc.x||0)+(acc.y||0)*(acc.y||0)+(acc.z||0)*(acc.z||0));
-      if (!e.acceleration) mag = Math.abs(mag-9.8);
-      if (mag > 18) {
+      if (!e.acceleration) mag = Math.abs(mag - 9.8);
+      if (mag > 25) {
         _shakeCount++;
         clearTimeout(_shakeTimer);
-        _shakeTimer = setTimeout(function(){ _shakeCount=0; }, 1000);
-        if (_shakeCount >= 3 && Date.now()-_lastShake > 4000) {
-          _lastShake=Date.now(); _shakeCount=0;
+        _shakeTimer = setTimeout(function(){ _shakeCount = 0; }, 1500);
+        if (_shakeCount >= 4 && Date.now() - _lastShake > 5000) {
+          _lastShake = Date.now(); _shakeCount = 0;
           window.openReportModal && window.openReportModal();
         }
       }

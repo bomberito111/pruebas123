@@ -23,6 +23,11 @@ window.openAdminPanel = function () {
 window.closeAdminPanel = function () {
   var modal = document.getElementById('adminPanelModal');
   if (modal) modal.style.display = 'none';
+  // Detener suscripción de reportes al cerrar
+  if (window._reportsUnsub) {
+    try { window._reportsUnsub(); } catch(e) {}
+    window._reportsUnsub = null;
+  }
 };
 
 /* ─────────────────────────────────────────
@@ -561,8 +566,38 @@ function renderSettingsTab() {
   html += '<button onclick="adminImportData()" style="width:100%;padding:10px;background:#eff6ff;border:1.5px solid #93c5fd;border-radius:10px;font-weight:600;font-size:12px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif;color:#1d4ed8;text-align:left">📤 Importar evaluaciones (JSON)</button>';
   html += '</div>';
 
+  // ── Reportes y sugerencias ──
+  html += '<div style="height:1px;background:#e5e0d8;margin:18px 0 16px"></div>';
+  html += '<div style="font-weight:800;font-size:13px;color:#0ea5e9;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px">📬 Reportes y sugerencias</div>';
+  html += renderReportesPanel();
+
   html += '</div>';
   return html;
+}
+
+/* ─────────────────────────────────────────
+   PANEL DE REPORTES (Programador only)
+───────────────────────────────────────── */
+
+function renderReportesPanel() {
+  var s = '';
+
+  // Filtros
+  s += '<div id="admin-reports-wrap">';
+  s += '<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">';
+  s += '<button id="rfilter-all"       onclick="adminReportsFilter(\'all\')"      style="padding:5px 12px;border-radius:20px;border:1.5px solid #0ea5e9;background:#e0f2fe;color:#0369a1;font-size:11px;font-weight:700;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">📬 Todos</button>';
+  s += '<button id="rfilter-error"     onclick="adminReportsFilter(\'error\')"    style="padding:5px 12px;border-radius:20px;border:1.5px solid #d4cfc5;background:#faf9f5;color:#6b7280;font-size:11px;font-weight:600;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">🐛 Errores</button>';
+  s += '<button id="rfilter-sugerencia" onclick="adminReportsFilter(\'sugerencia\')" style="padding:5px 12px;border-radius:20px;border:1.5px solid #d4cfc5;background:#faf9f5;color:#6b7280;font-size:11px;font-weight:600;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">💡 Sugerencias</button>';
+  s += '<button id="rfilter-pendientes" onclick="adminReportsFilter(\'pendientes\')" style="padding:5px 12px;border-radius:20px;border:1.5px solid #d4cfc5;background:#faf9f5;color:#6b7280;font-size:11px;font-weight:600;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">⏳ Pendientes</button>';
+  s += '<button id="rfilter-resueltos"  onclick="adminReportsFilter(\'resueltos\')"  style="padding:5px 12px;border-radius:20px;border:1.5px solid #d4cfc5;background:#faf9f5;color:#6b7280;font-size:11px;font-weight:600;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">✅ Resueltos</button>';
+  s += '</div>';
+  s += '<div id="admin-reports-list"><div style="text-align:center;padding:20px;color:#9ca3af;font-size:13px">Cargando reportes…</div></div>';
+  s += '</div>';
+
+  // Lanza la carga
+  setTimeout(function() { window.adminLoadReports && window.adminLoadReports('all'); }, 60);
+
+  return s;
 }
 
 /* ─────────────────────────────────────────
@@ -2124,3 +2159,142 @@ function smallBtnStyle(bg, border, color) {
 function inputStyle() {
   return 'width:100%;padding:11px 13px;border:1.5px solid #e5e0d8;border-radius:10px;font-family:\'IBM Plex Sans\',sans-serif;font-size:13px;margin-bottom:8px;background:#fff;display:block;box-sizing:border-box';
 }
+
+/* ─────────────────────────────────────────
+   GESTIÓN DE REPORTES Y SUGERENCIAS
+───────────────────────────────────────── */
+
+window._reportsCache   = {};
+window._reportsFilter  = 'all';
+window._reportsUnsub   = null;
+
+window.adminLoadReports = function (filter) {
+  window._reportsFilter = filter || 'all';
+  _adminSetReportFilterUI(filter);
+
+  // Suscripción en tiempo real (solo una vez)
+  if (!window._reportsUnsub && typeof window._fbOnReports === 'function') {
+    window._reportsUnsub = window._fbOnReports(function (snap) {
+      window._reportsCache = (snap && snap.val()) ? snap.val() : {};
+      _adminRenderReports();
+    });
+  } else {
+    _adminRenderReports();
+  }
+};
+
+window.adminReportsFilter = function (filter) {
+  window._reportsFilter = filter;
+  _adminSetReportFilterUI(filter);
+  _adminRenderReports();
+};
+
+function _adminSetReportFilterUI(filter) {
+  var ids = ['all','error','sugerencia','pendientes','resueltos'];
+  var actBg = { all:'#e0f2fe', error:'#fff1f2', sugerencia:'#fefce8', pendientes:'#fff7ed', resueltos:'#f0fdf4' };
+  var actColor = { all:'#0369a1', error:'#b91c1c', sugerencia:'#92400e', pendientes:'#92400e', resueltos:'#15803d' };
+  var actBorder = { all:'#0ea5e9', error:'#fca5a5', sugerencia:'#fcd34d', pendientes:'#d97706', resueltos:'#22c55e' };
+  ids.forEach(function(id) {
+    var btn = document.getElementById('rfilter-' + id);
+    if (!btn) return;
+    if (id === filter) {
+      btn.style.background   = actBg[id];
+      btn.style.color        = actColor[id];
+      btn.style.borderColor  = actBorder[id];
+      btn.style.fontWeight   = '700';
+    } else {
+      btn.style.background   = '#faf9f5';
+      btn.style.color        = '#6b7280';
+      btn.style.borderColor  = '#d4cfc5';
+      btn.style.fontWeight   = '600';
+    }
+  });
+}
+
+function _adminRenderReports() {
+  var list = document.getElementById('admin-reports-list');
+  if (!list) return;
+  var all = window._reportsCache || {};
+  var entries = Object.entries(all);
+
+  // Apply filter
+  var f = window._reportsFilter || 'all';
+  if (f === 'error')      entries = entries.filter(function(e){ return e[1].tipo === 'error'; });
+  if (f === 'sugerencia') entries = entries.filter(function(e){ return e[1].tipo === 'sugerencia'; });
+  if (f === 'pendientes') entries = entries.filter(function(e){ return !e[1].resolved; });
+  if (f === 'resueltos')  entries = entries.filter(function(e){ return !!e[1].resolved; });
+
+  // Sort newest first
+  entries.sort(function(a, b){ return (b[1].ts||0) - (a[1].ts||0); });
+
+  if (entries.length === 0) {
+    list.innerHTML = '<div style="text-align:center;padding:24px;color:#9ca3af;font-size:13px">Sin reportes en esta categoría</div>';
+    return;
+  }
+
+  var tipoIcon  = { error:'🐛', sugerencia:'💡', otro:'📌' };
+  var tipoColor = { error:'#b91c1c', sugerencia:'#92400e', otro:'#1d4ed8' };
+  var tipoBg    = { error:'#fff1f2', sugerencia:'#fefce8', otro:'#eff6ff' };
+  var sectionLabel = {
+    inicio:'🏠 Inicio', registros:'🗂️ Registros', 'admin-clientes':'🏢 Admin Clientes',
+    formulario:'📋 Formulario', 'portal-cliente':'👤 Portal', configuracion:'⚙️ Config',
+    mapa:'🗺️ Mapa', otro:'🔧 Otro', 'sin especificar':'—'
+  };
+
+  var html = '';
+  entries.forEach(function(entry) {
+    var key = entry[0];
+    var r   = entry[1];
+    var tipo = r.tipo || 'error';
+    var date = r.ts ? (new Date(r.ts)).toLocaleString('es-CL', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
+    var secLabel = sectionLabel[r.section] || r.section || '—';
+
+    html += '<div style="background:#fff;border:1.5px solid ' + (r.resolved ? '#d1fae5' : '#e5e0d8') + ';border-radius:14px;padding:13px 14px;margin-bottom:10px;' + (r.resolved ? 'opacity:.75' : '') + '">';
+
+    // Header row
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">';
+    html += '<span style="padding:3px 9px;background:' + tipoBg[tipo] + ';color:' + tipoColor[tipo] + ';border-radius:20px;font-size:10px;font-weight:800">' + (tipoIcon[tipo]||'📬') + ' ' + tipo.charAt(0).toUpperCase() + tipo.slice(1) + '</span>';
+    if (r.resolved) html += '<span style="padding:3px 9px;background:#d1fae5;color:#15803d;border-radius:20px;font-size:10px;font-weight:700">✅ Resuelto</span>';
+    html += '<span style="margin-left:auto;font-size:10px;color:#9ca3af">' + date + '</span>';
+    html += '</div>';
+
+    // Description
+    html += '<div style="font-size:13px;color:#1a1a1a;line-height:1.5;margin-bottom:8px">' + escH(r.description) + '</div>';
+
+    // Meta
+    html += '<div style="font-size:10px;color:#9ca3af;display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">';
+    html += '<span>👤 ' + escH(r.evaluador || '—') + '</span>';
+    html += '<span>🏷️ ' + escH(r.role || '—') + '</span>';
+    html += '<span>📍 ' + escH(secLabel) + '</span>';
+    html += '<span>🖥️ ' + escH(r.screen || '—') + '</span>';
+    html += '</div>';
+
+    // Actions
+    html += '<div style="display:flex;gap:7px">';
+    if (!r.resolved) {
+      html += '<button onclick="adminResolveReport(' + JSON.stringify(key) + ',true)" style="flex:1;padding:7px;background:#f0fdf4;color:#15803d;border:1.5px solid #86efac;border-radius:9px;font-size:11px;font-weight:700;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">✅ Marcar resuelto</button>';
+    } else {
+      html += '<button onclick="adminResolveReport(' + JSON.stringify(key) + ',false)" style="flex:1;padding:7px;background:#f3f4f6;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:9px;font-size:11px;font-weight:600;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">↩ Reabrir</button>';
+    }
+    html += '<button onclick="adminDeleteReport(' + JSON.stringify(key) + ')" style="padding:7px 12px;background:#fff1f2;color:#b91c1c;border:1.5px solid #fecdd3;border-radius:9px;font-size:11px;font-weight:700;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">🗑️</button>';
+    html += '</div>';
+    html += '</div>';
+  });
+
+  list.innerHTML = html;
+}
+
+window.adminResolveReport = function (key, resolved) {
+  if (typeof window._fbUpdateReport !== 'function') return;
+  window._fbUpdateReport(key, { resolved: resolved })
+    .then(function() { window.showNotif && window.showNotif(resolved ? '✅ Marcado como resuelto' : '↩ Reabierto'); })
+    .catch(function(e) { window.showNotif && window.showNotif('❌ Error: ' + (e.message||'')); });
+};
+
+window.adminDeleteReport = function (key) {
+  if (!confirm('¿Eliminar este reporte?')) return;
+  if (typeof window._fbRemoveReport !== 'function') return;
+  window._fbRemoveReport(key)
+    .then(function() { window.showNotif && window.showNotif('🗑️ Reporte eliminado'); })
+    .catch(function(e) { window.showNotif && window.showNotif('❌ Error: ' + (e.message||'')); });
+};
