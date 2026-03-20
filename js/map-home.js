@@ -287,10 +287,44 @@ window.startHomeGPSTracking = function () {
   if (!navigator.geolocation || !homeMapInstance) return;
   if (_homeWatchId !== null) return; // already watching
 
+  var _autoFlown = false; // auto-center solo en la primera posición
+
+  // Si GPS no responde en 6s, centrar por IP (usuarios sin GPS o en otro país)
+  var _ipFallbackTimer = setTimeout(function () {
+    if (_autoFlown) return;
+    fetch('https://ipapi.co/json/')
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (_autoFlown || !homeMapInstance) return;
+        if (d && d.latitude && d.longitude) {
+          _autoFlown = true;
+          homeMapInstance.setView([d.latitude, d.longitude], 13, { animate: true });
+        }
+      })
+      .catch(function() {
+        fetch('https://freeipapi.com/api/json')
+          .then(function(r) { return r.json(); })
+          .then(function(d) {
+            if (_autoFlown || !homeMapInstance) return;
+            if (d && d.latitude && d.longitude) {
+              _autoFlown = true;
+              homeMapInstance.setView([d.latitude, d.longitude], 13, { animate: true });
+            }
+          }).catch(function(){});
+      });
+  }, 6000);
+
   _homeWatchId = navigator.geolocation.watchPosition(
     function (pos) {
       var lat = pos.coords.latitude;
       var lng = pos.coords.longitude;
+
+      // Primera posición → auto-centrar el mapa en el usuario real
+      if (!_autoFlown) {
+        _autoFlown = true;
+        clearTimeout(_ipFallbackTimer);
+        homeMapInstance.setView([lat, lng], 16, { animate: true });
+      }
 
       var sz = _homeCompassHeading !== null ? 38 : 22;
       var anchor = _homeCompassHeading !== null ? 19 : 11;
@@ -314,6 +348,18 @@ window.startHomeGPSTracking = function () {
       if (err.code === 1) {
         navigator.geolocation.clearWatch(_homeWatchId);
         _homeWatchId = null;
+        clearTimeout(_ipFallbackTimer);
+        // Sin permiso GPS → centrar por IP inmediatamente
+        if (!_autoFlown) {
+          _autoFlown = true;
+          fetch('https://ipapi.co/json/')
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+              if (d && d.latitude && d.longitude && homeMapInstance) {
+                homeMapInstance.setView([d.latitude, d.longitude], 13, { animate: true });
+              }
+            }).catch(function(){});
+        }
       } else {
         console.warn('GPS tracking error:', err.message);
       }
@@ -428,8 +474,11 @@ window.initCompass = function () {
     if (heading === null || isNaN(heading)) return;
     _homeCompassHeading = heading;
 
-    // Compass bar is intentionally hidden — only the GPS marker cone shows direction.
-    // (Bar was covering the UI on mobile, so it stays hidden.)
+    // Mostrar barra de compás (ahora posicionada en fondo del mapa — no tapa UI superior)
+    if (wrap && wrap.style.display === 'none') {
+      wrap.style.display = 'block';
+    }
+    _updateCompassBar(heading);
 
     // Update GPS marker icon with direction
     if (_homeUserMarker) {

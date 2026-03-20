@@ -2335,9 +2335,9 @@ function _adminRenderReports() {
     // Captura de pantalla adjunta
     var shotSrc = r.screenshotUrl || r.screenshotBase64 || '';
     if (shotSrc) {
-      html += '<div style="margin-bottom:10px;border-radius:9px;overflow:hidden;border:1.5px solid #d4cfc5;cursor:pointer" onclick="adminViewScreenshot(' + JSON.stringify(shotSrc) + ')" title="Ver captura completa">';
-      html += '<img src="' + escH(shotSrc) + '" alt="Captura" style="width:100%;max-height:120px;object-fit:cover;display:block">';
-      html += '<div style="padding:4px 8px;background:#faf9f5;font-size:10px;color:#9ca3af;font-weight:600">📸 Captura de pantalla · toca para ampliar</div>';
+      html += '<div style="margin-bottom:10px;border-radius:9px;overflow:hidden;border:1.5px solid #d4cfc5;cursor:pointer" onclick="adminViewScreenshot(\'' + shotSrc.replace(/'/g, "\\'") + '\')" title="Ver captura completa">';
+      html += '<img src="' + escH(shotSrc) + '" alt="Captura" style="width:100%;max-height:200px;object-fit:contain;background:#f0ede7;display:block">';
+      html += '<div style="padding:5px 8px;background:#faf9f5;font-size:10px;color:#9ca3af;font-weight:600;display:flex;align-items:center;gap:6px">📸 Captura de pantalla <span style="margin-left:auto;color:#6b7280;font-size:9px">toca para ampliar →</span></div>';
       html += '</div>';
     }
 
@@ -2419,13 +2419,16 @@ window.adminViewScreenshot = function (src) {
   var overlay = document.createElement('div');
   overlay.id = '_screenshotViewer';
   overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px';
+  var escapedSrc = escH(src);
   overlay.innerHTML =
-    '<div style="position:absolute;top:16px;right:16px">' +
+    '<div style="position:absolute;top:16px;right:16px;display:flex;gap:8px">' +
+      '<a href="' + escapedSrc + '" target="_blank" ' +
+        'style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.15);border:none;color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;text-decoration:none" title="Abrir en nueva pestaña">↗</a>' +
       '<button onclick="document.getElementById(\'_screenshotViewer\').remove()" ' +
         'style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.15);border:none;color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>' +
     '</div>' +
-    '<img src="' + escH(src) + '" alt="Captura" style="max-width:100%;max-height:90vh;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.6);object-fit:contain">' +
-    '<div style="margin-top:12px;font-size:11px;color:rgba(255,255,255,.5)">Toca fuera de la imagen para cerrar</div>';
+    '<img src="' + escapedSrc + '" alt="Captura" style="max-width:min(100%,480px);max-height:85vh;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.6);object-fit:contain">' +
+    '<div style="margin-top:10px;font-size:11px;color:rgba(255,255,255,.5)">Toca fuera de la imagen para cerrar</div>';
   overlay.addEventListener('click', function(e) {
     if (e.target === overlay) overlay.remove();
   });
