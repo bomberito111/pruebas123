@@ -32,6 +32,11 @@ var _homeMapSatellite = true;
 var _homeSatLayer = null;
 var _homeStreetLayer = null;
 
+// ── Compass state ──
+var _homeCompassHeading = null; // degrees (0=N, 90=E, 180=S, 270=W)
+var _compassBarBuilt = false;
+var _compassOrientationListener = null;
+
 var SATELLITE_TILE_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 var SATELLITE_TILE_OPTS = {
   attribution: 'Tiles &copy; Esri',
@@ -89,6 +94,17 @@ window.initHomeMap = function () {
 
   // Start real-time GPS tracking (Google Maps-style moving blue dot)
   window.startHomeGPSTracking();
+
+  // Start compass (device orientation) — shows direction bar + arrow on marker
+  window.initCompass();
+
+  // iOS: request compass permission when user taps the locate button
+  var locBtn = document.getElementById('homeLocateBtn');
+  if (locBtn && window._compassPermissionNeeded) {
+    locBtn.addEventListener('click', function () {
+      window.requestCompassPermission();
+    }, { once: true });
+  }
 };
 
 window.initOrRefreshHomeMap = function () {
@@ -276,16 +292,20 @@ window.startHomeGPSTracking = function () {
       var lat = pos.coords.latitude;
       var lng = pos.coords.longitude;
 
+      var sz = _homeCompassHeading !== null ? 38 : 22;
+      var anchor = _homeCompassHeading !== null ? 19 : 11;
+      var icon = L.divIcon({
+        className: '',
+        html: _buildGPSIconHTML(_homeCompassHeading),
+        iconSize: [sz, sz],
+        iconAnchor: [anchor, anchor]
+      });
+
       if (_homeUserMarker) {
         _homeUserMarker.setLatLng([lat, lng]);
+        _homeUserMarker.setIcon(icon);
       } else {
-        var userIcon = L.divIcon({
-          className: '',
-          html: '<div style="width:16px;height:16px;border-radius:50%;background:#3b82f6;border:3px solid #fff;box-shadow:0 0 0 4px rgba(59,130,246,0.3);animation:homePulse 1.5s infinite;"></div>',
-          iconSize: [16, 16],
-          iconAnchor: [8, 8]
-        });
-        _homeUserMarker = L.marker([lat, lng], { icon: userIcon, zIndexOffset: 1000 });
+        _homeUserMarker = L.marker([lat, lng], { icon: icon, zIndexOffset: 1000 });
         _homeUserMarker.addTo(homeMapInstance);
       }
     },
@@ -310,6 +330,142 @@ window.stopHomeGPSTracking = function () {
   if (_homeUserMarker && homeMapInstance) {
     homeMapInstance.removeLayer(_homeUserMarker);
     _homeUserMarker = null;
+  }
+};
+
+/* ─────────────────────────────────────────
+   COMPASS BAR + GPS DIRECTION ARROW
+───────────────────────────────────────── */
+
+// Build the scrolling compass tape (called once)
+function _buildCompassTape() {
+  var tape = document.getElementById('compassTape');
+  if (!tape || _compassBarBuilt) return;
+  _compassBarBuilt = true;
+
+  var DEG_PER_PX = 1.5;  // 1.5 screen pixels per degree
+  var REPS = 3;           // 3 full revolutions → 1620px wide tape
+  var cardinals = { 0:'N', 45:'NE', 90:'E', 135:'SE', 180:'S', 225:'SO', 270:'O', 315:'NO' };
+  var html = '';
+
+  for (var r = 0; r < REPS; r++) {
+    for (var d = 0; d < 360; d += 5) {
+      var label = cardinals[d] || '';
+      var isMajor = (d % 45 === 0);
+      var isMid   = (d % 15 === 0 && !isMajor);
+      var tickH   = isMajor ? 10 : (isMid ? 6 : 3);
+      var tickCol = isMajor ? '#86efac' : 'rgba(134,239,172,0.35)';
+      var segW    = Math.round(5 * DEG_PER_PX * 10) / 10; // 7.5px
+
+      html += '<div style="flex-shrink:0;width:' + segW + 'px;position:relative;height:28px;">';
+      // tick at right edge of segment
+      html += '<div style="position:absolute;bottom:0;right:0;width:1px;height:' + tickH + 'px;background:' + tickCol + ';"></div>';
+      // label centered over major tick
+      if (isMajor) {
+        html += '<div style="position:absolute;top:3px;right:-12px;width:24px;text-align:center;font-family:\'IBM Plex Mono\',monospace;font-size:8px;font-weight:800;color:#86efac;letter-spacing:.03em;">' + label + '</div>';
+      }
+      html += '</div>';
+    }
+  }
+
+  tape.innerHTML = html;
+  tape.style.width = (REPS * 360 * DEG_PER_PX) + 'px';
+}
+
+// Update compass bar position + label for given heading (0-359°)
+function _updateCompassBar(heading) {
+  var wrap = document.getElementById('compassBarWrap');
+  var tape = document.getElementById('compassTape');
+  var lbl  = document.getElementById('compassHeadingLabel');
+  if (!wrap || !tape) return;
+
+  var DEG_PER_PX  = 1.5;
+  var fullRev     = 360 * DEG_PER_PX;   // 540px
+  var halfW       = wrap.offsetWidth / 2 || 187;
+  // Middle repetition (r=1) starts at 540px; heading position within it = heading * 1.5
+  var offset = halfW - (fullRev + heading * DEG_PER_PX);
+  tape.style.transform = 'translateX(' + offset + 'px)';
+
+  if (lbl) {
+    var dirs16 = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSO','SO','OSO','O','ONO','NO','NNO'];
+    var dirIdx = Math.round(heading / 22.5) % 16;
+    lbl.textContent = dirs16[dirIdx] + ' ' + Math.round(heading) + '°';
+  }
+}
+
+// Build the GPS user marker icon HTML (supports optional heading cone)
+function _buildGPSIconHTML(heading) {
+  var hasH = (heading !== null && heading !== undefined && !isNaN(heading));
+  var sz = hasH ? 38 : 22;
+  var html = '<div style="position:relative;width:' + sz + 'px;height:' + sz + 'px;">';
+  // Pulse ring
+  html += '<div style="position:absolute;inset:0;border-radius:50%;background:rgba(59,130,246,.2);animation:homePulse 1.5s infinite;"></div>';
+  // Direction cone via SVG (rotated to heading)
+  if (hasH) {
+    html += '<svg style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);overflow:visible;" width="38" height="38" viewBox="0 0 38 38">' +
+      '<polygon points="19,3 13,19 19,15 25,19" fill="rgba(59,130,246,.82)" stroke="rgba(255,255,255,.9)" stroke-width="1.2" stroke-linejoin="round" transform="rotate(' + heading + ',19,19)"/>' +
+      '</svg>';
+  }
+  // Blue dot center
+  html += '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:14px;height:14px;border-radius:50%;background:#3b82f6;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.38);z-index:1;"></div>';
+  html += '</div>';
+  return html;
+}
+
+// Initialise compass listening (call once)
+window.initCompass = function () {
+  _buildCompassTape();
+  var wrap = document.getElementById('compassBarWrap');
+
+  function handleOrientation(e) {
+    var alpha = e.alpha; // 0-360, compass bearing on some devices
+    var webkitHeading = e.webkitCompassHeading; // iOS: degrees from magnetic north (0-360)
+
+    var heading = webkitHeading !== undefined && webkitHeading !== null
+      ? webkitHeading
+      : (alpha !== null ? (360 - alpha) % 360 : null); // Android: convert alpha
+
+    if (heading === null || isNaN(heading)) return;
+    _homeCompassHeading = heading;
+
+    // Show bar
+    if (wrap && wrap.style.display === 'none') wrap.style.display = 'block';
+    _updateCompassBar(heading);
+
+    // Update GPS marker icon with direction
+    if (_homeUserMarker) {
+      var newIcon = L.divIcon({
+        className: '',
+        html: _buildGPSIconHTML(heading),
+        iconSize: [38, 38],
+        iconAnchor: [19, 19]
+      });
+      _homeUserMarker.setIcon(newIcon);
+    }
+  }
+
+  // iOS 13+ requires permission
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    // Attach to user gesture — request on first GPS button tap or auto on tap
+    window._compassPermissionNeeded = true;
+    // We'll call requestPermission from a button handler
+  } else if (typeof DeviceOrientationEvent !== 'undefined') {
+    // Android / desktop — no permission needed
+    window.addEventListener('deviceorientation', handleOrientation, true);
+    _compassOrientationListener = handleOrientation;
+  }
+  window._compassHandleOrientation = handleOrientation;
+};
+
+// Request iOS compass permission (call from a user gesture)
+window.requestCompassPermission = function () {
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    DeviceOrientationEvent.requestPermission().then(function(state) {
+      if (state === 'granted') {
+        window.addEventListener('deviceorientation', window._compassHandleOrientation, true);
+        window._compassPermissionNeeded = false;
+      }
+    }).catch(function(e) { console.warn('Compass permission denied:', e); });
   }
 };
 

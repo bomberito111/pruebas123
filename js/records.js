@@ -1183,27 +1183,70 @@
       html += section('Fotos (0)', noPhotoHtml, '📷');
     }
 
-    // ═══ 5. ALL FORM ANSWERS (every QS question) ═══
+    // ═══ 5. ALL FORM ANSWERS — Grouped by ISA TRAQ Phase ═══
     var qs = window.QS || [];
-    var formContent = '';
+    var phases = window.PHASES || [];
+    var SKIP_IDS = ['arbolId','especie','cliente','evaluador'];
+
+    // Group questions by phase index
+    var phaseGroups = {};
     qs.forEach(function(q) {
-      if (q.type === 'risk_target_group') return; // shown separately
-      if (['arbolId','especie','cliente','evaluador'].indexOf(q.id) !== -1) return; // already in ID section
-      var val = gv(q.id);
-      if (val === null || val === undefined) return;
-      if (q.type === 'group' && q.fields) {
-        var grp = (typeof val === 'object' && !Array.isArray(val)) ? val : {};
-        q.fields.forEach(function(f) {
-          var fv = grp[f.id];
-          if (fv !== undefined && fv !== null && fv !== '') {
-            formContent += row(f.label, fv);
-          }
-        });
-        return;
-      }
-      formContent += row(q.label, val);
+      if (q.type === 'risk_target_group') return; // shown separately in sections 6+
+      if (SKIP_IDS.indexOf(q.id) !== -1) return; // already in identification section
+      var ph = (q.ph !== undefined && q.ph !== null) ? q.ph : 99;
+      if (!phaseGroups[ph]) phaseGroups[ph] = [];
+      phaseGroups[ph].push(q);
     });
-    if (formContent) html += section('Respuestas del Formulario ISA TRAQ', formContent, '📋');
+
+    // Render one section per phase — always show ALL fields (empty = "—")
+    Object.keys(phaseGroups).sort(function(a,b){ return parseInt(a) - parseInt(b); }).forEach(function(ph) {
+      var pIdx = parseInt(ph);
+      var phaseInfo = phases[pIdx] || { label: 'Fase ' + (pIdx + 1), icon: '📋', desc: '' };
+      var phTitle = 'Fase ' + (pIdx + 1) + ': ' + phaseInfo.label;
+      var phContent = '';
+
+      phaseGroups[ph].forEach(function(q) {
+        var val = gv(q.id);
+
+        if (q.type === 'group' && q.fields) {
+          // Group header
+          var grp = (val && typeof val === 'object' && !Array.isArray(val)) ? val : {};
+          phContent +=
+            '<div style="padding:6px 0 3px;margin:6px 0 2px;border-bottom:1px dashed #e8e4dd;">' +
+              '<span style="font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#a09890;">' +
+                q.label +
+              '</span>' +
+            '</div>';
+          q.fields.forEach(function(f) {
+            var fv = grp[f.id];
+            var dv = (fv !== undefined && fv !== null && fv !== '') ? fv : '—';
+            phContent +=
+              '<div style="display:flex;gap:8px;padding:5px 0;border-bottom:1px solid #f5f0e8;">' +
+                '<span style="flex:0 0 44%;font-size:11px;font-weight:700;color:#7a746e;padding-right:8px;">' + f.label + '</span>' +
+                '<span style="flex:1;font-size:12px;font-weight:600;color:' + (dv === '—' ? '#c0bbb5' : '#1a1a1a') + ';word-break:break-word;">' + dv + '</span>' +
+              '</div>';
+          });
+          return;
+        }
+
+        // Compute display value — always show something
+        var displayVal;
+        if (val === null || val === undefined || val === '') {
+          displayVal = '—';
+        } else if (Array.isArray(val)) {
+          displayVal = val.length > 0 ? val.join(', ') : '—';
+        } else {
+          displayVal = String(val);
+        }
+        phContent +=
+          '<div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid #f5f0e8;">' +
+            '<span style="flex:0 0 44%;font-size:11px;font-weight:700;color:#7a746e;padding-right:8px;">' + q.label + '</span>' +
+            '<span style="flex:1;font-size:12px;font-weight:600;color:' + (displayVal === '—' ? '#c0bbb5' : '#1a1a1a') + ';word-break:break-word;">' + displayVal + '</span>' +
+          '</div>';
+      });
+
+      if (phContent) html += section(phTitle, phContent, phaseInfo.icon);
+    });
 
     // ═══ 6. DIANA GROUPS — full detail ═══
     var dianaGroups = [

@@ -151,6 +151,18 @@ body{font-family:'IBM Plex Sans',system-ui,sans-serif;background:var(--paper,#fa
     </div>
   </header>
 
+  <!-- ═══ COMPASS BAR ═══ -->
+  <div id="compassBarWrap" style="position:relative;height:28px;background:rgba(10,36,16,.96);overflow:hidden;flex-shrink:0;z-index:600;display:none;border-bottom:1px solid rgba(134,239,172,.15)">
+    <!-- Scrolling tape -->
+    <div id="compassTape" style="position:absolute;top:0;height:100%;display:flex;align-items:center;will-change:transform;"></div>
+    <!-- Center tick indicator -->
+    <div style="position:absolute;top:0;left:50%;transform:translateX(-50%);height:100%;pointer-events:none;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:0;">
+      <div style="width:2px;height:10px;background:#86efac;border-radius:1px 1px 0 0;"></div>
+    </div>
+    <!-- Current heading label above center -->
+    <div id="compassHeadingLabel" style="position:absolute;top:3px;left:50%;transform:translateX(-50%);font-size:9px;font-weight:800;color:#86efac;font-family:'IBM Plex Mono',monospace;letter-spacing:.05em;pointer-events:none;white-space:nowrap;background:rgba(10,36,16,.7);padding:0 5px;border-radius:3px;">N 0°</div>
+  </div>
+
   <!-- ═══ VIEWS CONTAINER ═══ -->
   <div class="views-wrap">
 
