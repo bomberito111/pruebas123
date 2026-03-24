@@ -53,6 +53,54 @@ body{font-family:'IBM Plex Sans',system-ui,sans-serif;background:var(--paper,#fa
 }
 @media print{body>*:not(#print-container){display:none!important}#print-container{display:block!important;position:static;width:100%;background:#fff;padding:20px;color:#000;overflow:visible}@page{margin:1.5cm}}
 #print-container{display:none}
+
+/* ── BUTTON ANIMATIONS ─────────────────────────────────── */
+button,
+[role="button"] {
+  position: relative;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .13s cubic-bezier(.4,0,.2,1),
+              box-shadow .13s ease,
+              filter .13s ease !important;
+}
+button:not(:disabled):hover,
+[role="button"]:hover {
+  transform: translateY(-1px) scale(1.01);
+  filter: brightness(1.07);
+  box-shadow: 0 4px 16px rgba(0,0,0,.18) !important;
+}
+button:not(:disabled):active,
+[role="button"]:active {
+  transform: scale(.95) translateY(1px) !important;
+  filter: brightness(.93) !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,.1) !important;
+  transition-duration: .07s !important;
+}
+button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+  transform: none !important;
+  filter: none !important;
+}
+/* Ripple effect */
+.btn-ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255,255,255,.38);
+  width: 10px;
+  height: 10px;
+  margin-top: -5px;
+  margin-left: -5px;
+  transform: scale(0);
+  animation: _btn-ripple .5s linear forwards;
+  pointer-events: none;
+  z-index: 99;
+}
+@keyframes _btn-ripple {
+  to { transform: scale(28); opacity: 0; }
+}
+/* ─────────────────────────────────────────────────────── */
 </style>
 </head>
 <body>
@@ -1328,6 +1376,23 @@ window.CLOUDINARY_UPLOAD_PRESET = 'bosques_urbanos';
 .dev-bool{color:#c084fc}
 .dev-null{color:#6b7280}
 </style>
+
+<script>
+/* ── Ripple effect on all buttons ── */
+(function(){
+  document.addEventListener('click', function(e){
+    var btn = e.target.closest('button,[role="button"]');
+    if (!btn || btn.disabled) return;
+    var r = document.createElement('span');
+    r.className = 'btn-ripple';
+    var rect = btn.getBoundingClientRect();
+    r.style.left = (e.clientX - rect.left) + 'px';
+    r.style.top  = (e.clientY - rect.top)  + 'px';
+    btn.appendChild(r);
+    setTimeout(function(){ r && r.parentNode && r.parentNode.removeChild(r); }, 550);
+  }, true);
+})();
+</script>
 
 </body>
 </html>
