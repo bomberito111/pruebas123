@@ -574,8 +574,10 @@
       });
 
       // ISA summary
-      var isaScore = ev.isaImpacto !== undefined && ev.isaImpacto !== null ? (parseFloat(ev.isaImpacto) * 100).toFixed(0) + '%' : null;
-      var bioMargin = ev.bioMargin !== undefined && ev.bioMargin !== null ? parseFloat(ev.bioMargin).toFixed(2) : null;
+      var _isaParsed = parseFloat(ev.isaImpacto);
+      var isaScore = (!isNaN(_isaParsed) && ev.isaImpacto !== null && ev.isaImpacto !== undefined) ? (_isaParsed * 100).toFixed(0) + '%' : null;
+      var _bmParsed = parseFloat(ev.bioMargin);
+      var bioMargin = (!isNaN(_bmParsed) && ev.bioMargin !== null && ev.bioMargin !== undefined) ? _bmParsed.toFixed(2) : null;
 
       // Photos
       var photos = (window.FB ? window.FB.getPhotoUrls(ev) : (ev.photoUrls || ans.photoUrls || [])).filter(function (u) { return u && typeof u === 'string'; });
@@ -1356,12 +1358,38 @@
       if (!arr || !arr.length) return;
       var dContent = '';
       arr.forEach(function(d, idx) {
-        var dr  = d.riesgo || 'bajo';
-        var dc  = getRiskColor(dr);
         var fKey      = d.fallo || d.prob_fallo || '';
         var iKey      = d.impacto || '';
         var consecStr = d.consec || d.consecuencia || '';
         var probCombKey = d.probComb || '';
+
+        // Compute probComb on-the-fly if not stored (older evaluations)
+        if (!probCombKey && fKey && iKey) {
+          var _M1L = {
+            inminente:  {muy_bajo:'improbable',bajo:'algo_probable',medio:'probable',alto:'muy_probable'},
+            probable:   {muy_bajo:'improbable',bajo:'improbable',medio:'algo_probable',alto:'probable'},
+            posible:    {muy_bajo:'improbable',bajo:'improbable',medio:'improbable',alto:'algo_probable'},
+            improbable: {muy_bajo:'improbable',bajo:'improbable',medio:'improbable',alto:'improbable'}
+          };
+          var _fN = _dtNorm(fKey), _iN = _dtNorm(iKey);
+          probCombKey = (_M1L[_fN] && _M1L[_fN][_iN]) || 'improbable';
+        }
+
+        // Compute final risk on-the-fly if not stored
+        var dr = d.riesgo || '';
+        if (!dr && probCombKey && consecStr) {
+          var _M2L = {
+            muy_probable:  {insignificante:'bajo',menor:'moderado',significativa:'alto',severo:'extremo'},
+            probable:      {insignificante:'bajo',menor:'moderado',significativa:'alto',severo:'alto'},
+            algo_probable: {insignificante:'bajo',menor:'bajo',significativa:'moderado',severo:'moderado'},
+            improbable:    {insignificante:'bajo',menor:'bajo',significativa:'bajo',severo:'bajo'}
+          };
+          var _cN = _dtNorm(consecStr);
+          dr = (_M2L[probCombKey] && _M2L[probCombKey][_cN]) || 'bajo';
+        }
+        if (!dr) dr = 'bajo';
+
+        var dc  = getRiskColor(dr);
 
         dContent +=
           '<div style="border:1.5px solid ' + dc + ';border-radius:10px;background:' + dc + '0f;padding:11px 13px;margin-bottom:10px;">' +
@@ -1458,7 +1486,7 @@
       '<textarea id="detail-notes-' + key + '" ' +
         'style="width:100%;min-height:80px;padding:10px 12px;border:1.5px solid #e8e4dd;border-radius:10px;font-family:inherit;font-size:13px;resize:vertical;outline:none;line-height:1.5;box-sizing:border-box;" ' +
         'placeholder="Añade notas, observaciones del campo...">' +
-        safeVal(ev.notes === '—' ? '' : (ev.notes || '')) +
+        safeVal((ev.notes && ev.notes !== '—' && ev.notes !== '--') ? ev.notes : '') +
       '</textarea>' +
       '<button onclick="saveTreeNotes(\'' + key + '\')" ' +
         'style="margin-top:6px;padding:9px 20px;background:#0f3320;color:#fff;border:none;border-radius:9px;font-weight:700;font-size:12px;cursor:pointer;width:100%;">💾 Guardar notas</button>';
